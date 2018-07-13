@@ -46,7 +46,7 @@ varYextPix = 128
 lstPathNiiPrm = ['/home/marian/Documents/Testing/vificov_testing/pRF_results_smooth_x_pos.nii', '/home/marian/Documents/Testing/vificov_testing/pRF_results_smooth_y_pos.nii', '/home/marian/Documents/Testing/vificov_testing/pRF_results_smooth_SD.nii']
 
 # Path to nii files with mask (region of interests like V1, V2, V3):
-lstPathNiiMask = ['/home/marian/Documents/Testing/vificov_testing/S02_msk_V1_1mm.nii', '/home/marian/Documents/Testing/vificov_testing/S02_msk_V2_1mm.nii', '/home/marian/Documents/Testing/vificov_testing/S02_msk_V3_1mm.nii']
+lstPathNiiMask = ['/home/marian/Documents/Testing/vificov_testing/S02_msk_V1_LH.nii', '/home/marian/Documents/Testing/vificov_testing/S02_msk_V2_LH.nii', '/home/marian/Documents/Testing/vificov_testing/S02_msk_V3_LH.nii']
 
 # Output basename:
 strPathOut = '/home/marian/Documents/Testing/vificov_testing/output/vificov'
