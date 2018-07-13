@@ -1,0 +1,53 @@
+# Visual Field Coverage (ViFiCov) visualization in python.
+
+# Part of vificov library
+# Copyright (C) 2018  Marian Schneider
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Extent of visual space from centre of the screen in negative x-direction
+# (i.e. from the fixation point to the left end of the screen) in degrees
+# of visual angle.
+varXminDeg = -12.0
+# Extent of visual space from centre of the screen in positive x-direction
+# (i.e. from the fixation point to the right end of the screen) in degrees
+# of visual angle.
+varXmaxDeg = 12.0
+# Extent of visual space from centre of the screen in negative y-direction
+# (i.e. from the fixation point to the lower end of the screen) in degrees
+# of visual angle.
+varYminDeg = -12.0
+# Extent of visual space from centre of the screen in positive y-direction
+# (i.e. from the fixation point to the upper end of the screen) in degrees
+# of visual angle.
+varYmaxDeg = 12.0
+
+# Extent of visual space from left to right on the screen in pixels
+# This will be width ouput image
+varXextPix = 128
+
+# Extent of visual space from bottom to top on the screen in pixels
+# This will be height ouput image
+varYextPix = 128
+
+# Path to nii files with parameter output.
+# Order should be [x-position, y-position, sigma]:
+lstPathNiiPrm = ['~/prmXpos.nii', '~/prmYpos.nii', '~/prmSigma.nii']
+
+# Path to nii files with mask (region of interests like V1, V2, V3):
+lstPathNiiMask = ['~/maskV1.nii', '~/maskV2.nii', '~/maskV3.nii', '~/fnc04.nii']
+
+# Output basename:
+strPathOut = '~/pRF_results/pRF_results'
+
