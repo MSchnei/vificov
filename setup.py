@@ -8,7 +8,7 @@ For development installation:
 from setuptools import setup
 
 setup(name='vificov',
-      version='1.0.0',
+      version='1.0.2',
       description=('Visual Field Coverage (ViFiCov) visualization in python.'),
       url='https://github.com/MSchnei/vificov',
       author='Marian Schneider',
