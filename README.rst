@@ -1,6 +1,3 @@
-vificov
-=======
-
 **Vi** sual **Fi** eld **Cov** erage (ViFiCov) visualization in python.
 
 This package takes as input parameters that describe a 2D Gaussian model
