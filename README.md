@@ -32,13 +32,13 @@ pip install /path/to/cloned/vificov
 ## How to use
 
 ### 1. Adjust the csv file
-Adjust the information in the config_default.csv file in the Analysis folder, such that the provided information is correct.
-It is recommended to make a specific copy of the csv file for every subject.
+Adjust the information in the config_default.csv file, such that the provided information is correct.
+It is recommended to make a specific copy of the csv file for every subject and project.
 
 ### 2. Run pyprf_motion
 Open a terminal and run
 ```
-pyprf_motion -config path/to/custom_config.csv
+vificov -config path/to/custom_config.csv
 ```
 
 ## References
