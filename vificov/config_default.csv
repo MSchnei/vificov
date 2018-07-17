@@ -48,6 +48,18 @@ lstPathNiiPrm = ['~/prmXpos.nii', '~/prmYpos.nii', '~/prmSigma.nii']
 # Path to nii files with mask (region of interests like V1, V2, V3):
 lstPathNiiMask = ['~/maskV1.nii', '~/maskV2.nii', '~/maskV3.nii', '~/fnc04.nii']
 
+# Path to nii files with threshold map.
+# Provide empty string if thresholding is undesired.
+strPathNiiThr = '~/R2.nii'
+
+# Provide threshold value for threshold map.
+# Will be ignored if no threshold map is provided.
+varThr = 0.2
+
+# Number of bootstraps of the FOV.
+# Set to 0 if no bootstrapping is desired.
+varNumBts = 50
+
 # Output basename:
 strPathOut = '~/pRF_results/pRF_results'
 

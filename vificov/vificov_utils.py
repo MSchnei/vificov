@@ -1,4 +1,3 @@
-#!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 """All utilities for vificov."""
 
@@ -22,6 +21,7 @@
 
 import numpy as np
 import scipy as sp
+import warnings
 import nibabel as nb
 
 
@@ -117,7 +117,9 @@ def loadNiiDataExt(lstFunc,
             for indAry, aryPrm in enumerate(lstPrm):
                 # get voxels specific to this mask
                 aryPrmSel[:, indAry] = aryPrm[aryMsk, ...]
-            lstPrmAry[indLst] = aryPrmSel
+            # put array away in list, if only one parameter map was provided
+            # the output will be squeezed
+            lstPrmAry[indLst] = np.squeeze(aryPrmSel)
 
     # also get header object and affine array
     # we simply take it for the first functional nii file, cause that is the
@@ -171,8 +173,8 @@ def rmp_rng(aryVls, varNewMin, varNewMax, varOldThrMin=None,
     return aryNewVls
 
 
-def rmp_deg_pixel_x_y_s(vecX, vecY, vecPrfSd, tplPngSize,
-                        varExtXmin, varExtXmax, varExtYmin, varExtYmax):
+def rmp_deg_pixel_xys(vecX, vecY, vecPrfSd, tplPngSize,
+                      varExtXmin, varExtXmax, varExtYmin, varExtYmax):
     """Remap x, y, sigma parameters from degrees to pixel.
 
     Parameters
@@ -201,6 +203,7 @@ def rmp_deg_pixel_x_y_s(vecX, vecY, vecPrfSd, tplPngSize,
         Array with possible y parametrs in pixel
     vecPrfSd : 1D numpy array
         Array with possible sd parametrs in pixel
+
     """
     # Remap modelled x-positions of the pRFs:
     vecXpxl = rmp_rng(vecX, 0.0, (tplPngSize[0] - 1), varOldThrMin=varExtXmin,
@@ -225,8 +228,10 @@ def rmp_deg_pixel_x_y_s(vecX, vecY, vecPrfSd, tplPngSize,
 
     # Convert prf sizes from degrees of visual angles to pixel
     vecPrfSdpxl = np.multiply(vecPrfSd, varDgr2PixX)
-
-    return np.column_stack((vecXpxl, vecYpxl, vecPrfSdpxl))
+    
+    # Return new values in column stack.
+    # Since values are now in pixel, they should be integer
+    return np.column_stack((vecXpxl, vecYpxl, vecPrfSdpxl)).astype(np.int32)
 
 
 def crt_2D_gauss(varSizeX, varSizeY, varPosX, varPosY, varSd):
@@ -265,8 +270,102 @@ def crt_2D_gauss(varSizeX, varSizeY, varPosX, varPosY, varSd):
         (2.0 * np.square(varSd))
         )
     aryGauss = np.exp(-aryGauss) / (2 * np.pi * np.square(varSd))
+    
+    # because we assume later (when plugging in the winner parameters) that the
+    # origin of the created 2D Gaussian was in the lower left and that the
+    # first axis of the array indexes the left-right direction of the screen
+    # and the second axis indexes the the top-down direction of the screen,
+    # we rotate by 90 degrees clockwise
+    aryGauss = np.rot90(aryGauss, k=1)
 
     return aryGauss
+
+
+def crt_fov(aryPrm, tplVslSpcPix):
+    """Create field of view for given winner x,y,sigma parameters.
+
+    Parameters
+    ----------
+    aryPrm : 2D numpy array, shape [number of voxels, 3]
+        Array with x, y, and sigma winner parameters for all voxels included in
+        a given ROI
+    tplVslSpcPix : tuple
+        Tuple with the (width, height) of the visual field in pixel.
+
+    Returns
+    -------
+    aryAddGss : 2d numpy array, shape [width, height]
+        Visual field coverage using the additive method.
+    aryMaxGss : 2d numpy array, shape [width, height]
+        Visual field coverage using maximum method.
+
+    References
+    -------
+    [1]
+
+    """
+
+    # Prepare image for additive Gaussian
+    aryAddGss = np.zeros((tplVslSpcPix))
+    # Prepare image for max Gaussian
+    aryMaxGss = np.zeros((tplVslSpcPix))
+
+    # Loop over voxels
+    varDivCnt = 0
+    for indVxl, vecVxlPrm in enumerate(aryPrm):
+        # Extract winner parameters for this voxel
+        varPosX, varPosY, varSd = vecVxlPrm[0], vecVxlPrm[1], vecVxlPrm[2]
+        # Do not continue the for-loop for voxels that have a standard
+        # deviation of 0 pixels
+        if np.isclose(varSd, 0, atol=1e-04):
+            continue
+        else:
+            # Recreate the winner 2D Gaussian
+            aryTmpGss = crt_2D_gauss(tplVslSpcPix[0], tplVslSpcPix[1],
+                                     varPosX, varPosY, varSd)
+            if np.sum(np.isnan(aryTmpGss)) > 1:
+                warnings.warn("NaN value encountered in 2D Gaussian")
+            # Add Gaussians for this region
+            aryAddGss += aryTmpGss
+            # Replace pixels for which aryTmpGss is greater than aryMaxGss
+            aryTmpGssNrm = np.divide(aryTmpGss, aryTmpGss.max())
+            lgcMaxGss = np.greater(aryTmpGssNrm, aryMaxGss)
+            aryMaxGss[lgcMaxGss] = np.copy(aryTmpGssNrm[lgcMaxGss])
+            # Add to division couner
+            varDivCnt += 1
+
+    # Divide by total number of Gaussians that were included
+    aryAddGss /= varDivCnt
+    
+    return aryAddGss, aryMaxGss
+
+
+def bootstrap_resample(aryX, varLen=None):
+    """Perform resampling via bootstrapping for an input array.
+
+    Parameters
+    ----------
+    aryX : 1D numpy array
+        Data to be resampled.
+    varLen : int, optional
+        Length of bootsrapped sample. Equal to len(aryX) if varLen==None.
+
+    Returns
+    -------
+    aryRsm : 1D numpy array
+        Bootstrapped sample of the input array.
+
+    References
+    -------
+    [1] Modified from: https://gist.github.com/aflaxman/6871948
+    
+    """
+    if varLen == None:
+        varLen = len(aryX)
+        
+    resample_i = np.floor(np.random.rand(varLen)*len(aryX)).astype(int)
+    aryRsm = aryX[resample_i]
+    return aryRsm
 
 
 class cls_set_config(object):
@@ -279,6 +378,7 @@ class cls_set_config(object):
         Dictionary containing parameter names (as keys) and parameter values
         (as values). For example, `dicCnfg['varTr']` contains a float, such as
         `2.94`.
+
     """
 
     def __init__(self, dicCnfg):

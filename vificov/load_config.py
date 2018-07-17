@@ -116,6 +116,24 @@ def load_config(strCsvCnfg):
         for strTmp in dicCnfg['lstPathNiiMask']:
             print('   ' + str(strTmp))
 
+    # Path to nii files with threshold map:
+    dicCnfg['strPathNiiThr'] = ast.literal_eval(dicCnfg['strPathNiiThr'])
+    if lgcPrint:
+        print('---Path to nii files with threshold map:')
+        print('   ' + str(dicCnfg['strPathNiiThr']))
+
+    # Threshold value for threshold map:
+    dicCnfg['varThr'] = float(dicCnfg['varThr'])
+    if lgcPrint:
+        print('---Threshold value for threshold map: '
+              + str(dicCnfg['varThr']))
+
+    # Number of bootstraps of the FOV:
+    dicCnfg['varNumBts'] = int(dicCnfg['varNumBts'])
+    if lgcPrint:
+        print('---Number of bootstraps of the FOV: '
+              + str(dicCnfg['varNumBts']))
+
     # Output basename:
     dicCnfg['strPathOut'] = ast.literal_eval(dicCnfg['strPathOut'])
     if lgcPrint:
