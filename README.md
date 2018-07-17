@@ -1,5 +1,5 @@
 # vificov
-<img src="logo/logo.png" width=512 align="center" />
+<img src="logo/vificcov_logo.png" width=512 align="center" />
 **Vi** sual **Fi** eld **Cov** erage (ViFiCov) visualization in python.
 
 This package takes as input parameters that describe a 2D Gaussian model for a set of voxels and returns projections of the voxels' visual field coverage.
