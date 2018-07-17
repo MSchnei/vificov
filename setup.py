@@ -11,7 +11,7 @@ with open('README.rst') as f:
     long_description = f.read()
 
 setup(name='vificov',
-      version='1.0.3',
+      version='1.0.4',
       description=('Visual Field Coverage (ViFiCov) visualization in python.'),
       url='https://github.com/MSchnei/vificov',
       author='Marian Schneider',
