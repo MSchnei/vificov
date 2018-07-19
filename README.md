@@ -2,7 +2,9 @@
 
 **Vi** sual **Fi** eld **Cov** erage (ViFiCov) visualization in python.
 
-This package takes as input parameters that describe a 2D Gaussian model for a set of voxels and returns projections of the voxels' visual field coverage.
+This package takes parameters that describe a 2D Gaussian model for a set of voxels and returns projections of the voxels' visual field coverage.
+It can be used as an add-on to packages from the pyprf family ([pyprf](https://github.com/ingo-m/pyprf), [pyprf_motion](https://github.com/MSchnei/pyprf_motion), [pyprf_feauture](https://github.com/MSchnei/pyprf_feature)), which all estimate 2D Gaussian parameters for a set of given voxels.
+
 
 ## Installation
 
