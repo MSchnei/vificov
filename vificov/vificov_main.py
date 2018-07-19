@@ -23,14 +23,15 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from vificov.load_config import load_config
-from vificov.vificov_utils import (cls_set_config, loadNiiDataExt, crt_fov,
-                                   rmp_deg_pixel_xys, bootstrap_resample)
+from vificov.vificov_utils import (cls_set_config, loadNiiPrm, crt_fov,
+                                   rmp_deg_pixel_xys, bootstrap_resample,
+                                   prep_func, crt_prj)
 
 
 def run_vificov(strCsvCnfg):
     ###########################################################################
-    ## debugging
-    #strCsvCnfg = '/home/marian/Documents/Git/vificov/vificov/config_custom.csv'
+    # debugging
+    strCsvCnfg = '/home/marian/Documents/Testing/vificov_testing/config_custom.csv'
     ###########################################################################
     # %% Load parameters and files
 
@@ -43,8 +44,8 @@ def run_vificov(strCsvCnfg):
     # Load x values, y and sigma values for all region of interests that were
     # provided as masks
     print('---Load provided parameter maps')
-    lstPrmAry, objHdr, aryAff = loadNiiDataExt(cfg.lstPathNiiPrm,
-                                               lstFlsMsk=cfg.lstPathNiiMask)
+    lstPrmAry, objHdr, aryAff = loadNiiPrm(cfg.lstPathNiiPrm,
+                                           lstFlsMsk=cfg.lstPathNiiMask)
 
     # Deduce number of region of interest
     cfg.varNumRois = len(lstPrmAry)
@@ -53,12 +54,18 @@ def run_vificov(strCsvCnfg):
     # Load threshold map, if desired by user
     if cfg.strPathNiiThr:
         # Get threshold values
-        lstThr = loadNiiDataExt([cfg.strPathNiiThr],
-                                lstFlsMsk=cfg.lstPathNiiMask)[0]
+        lstThr = loadNiiPrm([cfg.strPathNiiThr],
+                            lstFlsMsk=cfg.lstPathNiiMask)[0]
         # Turn threshold values into boolean arrays by checking if they are
         # above the threshold specified by the user
         for ind, aryThr in enumerate(lstThr):
             lstThr[ind] = np.greater_equal(aryThr, cfg.varThr)
+
+    # Load stats values, if desired by user
+    if cfg.lstPathNiiStats[0]:
+        print('---Load provided statistical maps')
+        lstStatMaps = prep_func(cfg.lstPathNiiMask, cfg.lstPathNiiStats,
+                                strPrepro=cfg.strPrepro)[3]
 
     # Apply threshold map, if desired by user
     if cfg.strPathNiiThr:
@@ -69,6 +76,10 @@ def run_vificov(strCsvCnfg):
             varNumVxlBfr = aryPrm.shape[0]
             # apply threshold boolean to exclude voxels
             lstPrmAry[ind] = aryPrm[aryThr, ...]
+            # apply threshold to stats map, if they were provided
+            if cfg.lstPathNiiStats[0]:
+                aryMap = lstStatMaps[ind]
+                lstStatMaps[ind] = aryMap[aryThr, ...]
             # Check how many voxels were excluded
             varNumVxlExl = varNumVxlBfr - lstPrmAry[ind].shape[0]
             # print number of voxels included and excluded
@@ -159,6 +170,23 @@ def run_vificov(strCsvCnfg):
             lstBtsMaxGss[indRoi] = np.divide(aryBtsMaxGss,
                                              float(cfg.varNumBts))
 
+    # %% Project stats map into the visual field
+
+    if cfg.lstPathNiiStats[0]:
+        print('---Project stats map into the visual field')
+
+        # Prepare list for normalized projections
+        lstPrj = [None] * len(lstStatMaps)
+        
+        # Loop over ROIs
+        for indRoi, (aryPrm, aryMap) in enumerate(zip(lstPrmAry, lstStatMaps)):
+            print('------for ROI ' + str(indRoi+1))
+
+            aryPrj = crt_prj(aryPrm, aryMap, cfg.tplVslSpcPix)
+
+            # Put projection away to list
+            lstPrj[indRoi] = aryPrj
+
     # %% Save visual field coverage images to disk
     print('---Save visual field coverage images to disk')
 
@@ -167,8 +195,10 @@ def run_vificov(strCsvCnfg):
         # get arrays
         aryAddGss = lstAddGss[ind]
         aryMaxGss = lstMaxGss[ind]
-        aryBtsAddGss = lstBtsAddGss[ind]
-        aryBtsMaxGss = lstBtsMaxGss[ind]
+
+        if cfg.varNumBts > 0:
+            aryBtsAddGss = lstBtsAddGss[ind]
+            aryBtsMaxGss = lstBtsMaxGss[ind]
 
         # Derive file name
         strPthFln = os.path.basename(
@@ -182,11 +212,31 @@ def run_vificov(strCsvCnfg):
         plt.imsave(strPthImg + '_FOV_max.png', aryMaxGss, cmap='magma',
                    format="png", vmin=0.0, vmax = 1.0)
 
-        plt.imsave(strPthImg + '_FOV_add_btsrp.png', aryBtsAddGss,
-                   cmap='viridis', format="png", vmin=0.0,
-                   vmax = np.percentile(aryAddGss, 95))
-        plt.imsave(strPthImg + '_FOV_max_btsrp.png', aryBtsMaxGss,
-                   cmap='magma', format="png", vmin=0.0, vmax = 1.0)
+        if cfg.varNumBts > 0:
+            plt.imsave(strPthImg + '_FOV_add_btsrp.png', aryBtsAddGss,
+                       cmap='viridis', format="png", vmin=0.0,
+                       vmax = np.percentile(aryAddGss, 95))
+            plt.imsave(strPthImg + '_FOV_max_btsrp.png', aryBtsMaxGss,
+                       cmap='magma', format="png", vmin=0.0, vmax = 1.0)
+
+        if cfg.lstPathNiiStats[0]:
+            # get projections for this ROI
+            aryPrj = lstPrj[ind]
+            # loop over different projections
+            for indPrj in range(aryPrj.shape[-1]):
+                # get particular iamge projection
+                imaPrj = aryPrj[..., indPrj]
+                if indPrj < 10:
+                    strPrnt = '_prjIma_000' + str(indPrj)
+                elif indPrj < 100:
+                    strPrnt = '_prjIma_00' + str(indPrj)
+                elif indPrj < 1000:
+                    strPrnt = '_prjIma_0' + str(indPrj)
+                elif indPrj < 10000:
+                    strPrnt = '_prjIma_' + str(indPrj)
+                # use cmap='RdBu'
+                plt.imsave(strPthImg + strPrnt + '.png', imaPrj,
+                           cmap='viridis', format="png")
 
     # %% Print done statement.
     print('---Done.')
