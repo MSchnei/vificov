@@ -63,14 +63,137 @@ def loadNiiData(strPathNii, typPrc=None):
     return aryDataNii, objHdr, aryAff
 
 
-def loadNiiDataExt(lstFunc,
-                   lstFlsMsk=None):
-    """Load nii data from multiple nii files, with optional mask argument.
+def prep_func(lstPathNiiMask, lstPathNiiFunc, strPrepro=None):
+    """
+    Load & prepare functional data.
+
+    Parameters
+    ----------
+    lstPathNiiMask: list
+        List of paths to masks used to restrict pRF model finding. Only voxels
+        with a value other than zero in the mask are considered.
+    lstPathNiiFunc : list
+        List of paths of functional data (3D or 4D nii files).
+    strPrepro : NoneType or string
+        Flag to determine the preprocessing that will be performed on files.
+        Accepeted options are: None, 'demean', 'psc', or 'zscore'.
+
+    Returns
+    -------
+    aryLgcMsk : np.array
+        3D numpy array with logial values. Externally supplied mask (e.g grey
+        matter mask). Voxels that are `False` in the mask are excluded.
+    hdrMsk : nibabel-header-object
+        Nii header of mask.
+    aryAff : np.array
+        Array containing 'affine', i.e. information about spatial positioning
+        of mask nii data.
+    lstFuncOut : list
+        List containing 2D numpy arrays with prepared functional data, of the
+        form aryFunc[voxelCount, time]. There will be as many 2D arrays as
+        masks were provided in the list.
+    tplNiiShp : tuple
+        Spatial dimensions of input nii data (number of voxels in x, y, z
+        direction). The data are reshaped during preparation, this
+        information is needed to fit final output into original spatial
+        dimensions.
+
+    Notes
+    -----
+    Functional data is loaded from disk. The functional data is reshaped, into
+    the form aryFunc[voxel, time]. A mask is applied (externally supplied, e.g.
+    a grey matter mask). Subsequently, the functional data is pre-processed.
+    """
+
+    # prepare output list
+    lstFuncOut = [None] * len(lstPathNiiMask)
+
+    # loop over different masks that were provided by the user
+    for indMsk, strPathNiiMask in enumerate(lstPathNiiMask):
+
+        print('------Mask number ' + str(indMsk+1))
+
+        # Load mask (to restrict model fitting) as boolean:
+        aryLgcMsk, hdrMsk, aryAff = loadNiiData(strPathNiiMask, typPrc=np.bool)
+
+        # Dimensions of nii data:
+        tplNiiShp = aryLgcMsk.shape
+
+        # List for arrays with functional data (possibly several runs):
+        lstFunc = []
+
+        # Number of runs:
+        varNumRun = len(lstPathNiiFunc)
+
+        # Loop through runs and load data:
+        for idxRun in range(varNumRun):
+
+            print(('---------Prepare run ' + str(idxRun + 1)))
+
+            # Load 4D nii data:
+            aryTmpFunc, _, _ = loadNiiData(lstPathNiiFunc[idxRun])
+
+            # Apply mask:
+            aryTmpFunc = aryTmpFunc[aryLgcMsk, ...]
+
+            # make sure that aryTmpFunc is two-dimensional
+            if len(aryTmpFunc.shape) == 1:
+                aryTmpFunc = aryTmpFunc.reshape(-1, 1)
+
+            # perform preprocessing, if desired by user
+            if strPrepro == 'demean':
+                # De-mean functional data:
+                print('------------Demean')
+                aryTmpFunc = np.subtract(
+                    aryTmpFunc, np.mean(aryTmpFunc,
+                                        axis=1,
+                                        dtype=np.float32)[:, None])
+
+            if strPrepro == 'psc':
+                # Get percent signal change of functional data:
+                print('------------Get percent signal change')
+                aryTmpStd = np.std(aryTmpFunc, axis=-1)
+                aryTmpMean = np.mean(aryTmpFunc, axis=-1)
+                aryTmpLgc = np.greater(aryTmpStd, np.array([0.0]))
+                aryTmpFunc[aryTmpLgc, :] = np.divide(
+                    aryTmpFunc[aryTmpLgc, :],
+                    aryTmpMean[aryTmpLgc, None]) * 100 - 100
+
+            if strPrepro == 'zscore':
+                # Score functional data:
+                print('------------Zscore')
+                aryTmpFunc = np.subtract(aryTmpFunc,
+                                         np.mean(aryTmpFunc,
+                                                 axis=1,
+                                                 dtype=np.float32)[:, None])
+                aryTmpStd = np.std(aryTmpFunc, axis=-1)
+                aryTmpLgc = np.greater(aryTmpStd, np.array([0.0]))
+                aryTmpFunc[aryTmpLgc, :] = np.divide(
+                    aryTmpFunc[aryTmpLgc, :], aryTmpStd[aryTmpLgc, None])
+
+            # Put prepared functional data of current run into list:
+            lstFunc.append(aryTmpFunc)
+            del(aryTmpFunc)
+
+        # Put functional data from separate runs into one array. 2D array of
+        # the form aryFunc[voxelCount, time]
+        aryFunc = np.concatenate(lstFunc, axis=1).astype(np.float32,
+                                                         copy=False)
+        del(lstFunc)
+
+        # Put functional array for this paricular mask away to output list
+        lstFuncOut[indMsk] = aryFunc
+
+    return aryLgcMsk, hdrMsk, aryAff, lstFuncOut, tplNiiShp
+
+
+def loadNiiPrm(lstFunc, lstFlsMsk=None):
+    """Load parameters from multiple nii files, with optional mask argument.
 
     Parameters
     ----------
     lstFunc : list,
-        list of str with file names of nii files
+        list of str with file names of 3D nii files
     lstFlsMsk : list, optional
         list of str with paths to 3D nii files that can act as mask/s
     Returns
@@ -228,7 +351,7 @@ def rmp_deg_pixel_xys(vecX, vecY, vecPrfSd, tplPngSize,
 
     # Convert prf sizes from degrees of visual angles to pixel
     vecPrfSdpxl = np.multiply(vecPrfSd, varDgr2PixX)
-    
+
     # Return new values in column stack.
     # Since values are now in pixel, they should be integer
     return np.column_stack((vecXpxl, vecYpxl, vecPrfSdpxl)).astype(np.int32)
@@ -270,7 +393,7 @@ def crt_2D_gauss(varSizeX, varSizeY, varPosX, varPosY, varSd):
         (2.0 * np.square(varSd))
         )
     aryGauss = np.exp(-aryGauss) / (2 * np.pi * np.square(varSd))
-    
+
     # because we assume later (when plugging in the winner parameters) that the
     # origin of the created 2D Gaussian was in the lower left and that the
     # first axis of the array indexes the left-right direction of the screen
@@ -336,8 +459,41 @@ def crt_fov(aryPrm, tplVslSpcPix):
 
     # Divide by total number of Gaussians that were included
     aryAddGss /= varDivCnt
-    
+
     return aryAddGss, aryMaxGss
+
+
+def crt_prj(aryPrm, aryStatsMap, tplVslSpcPix):
+
+    # Prepare image stack for additive Gaussian and projection
+    aryAddGss = np.zeros((tplVslSpcPix), dtype=np.float32)
+    aryAddPrj = np.zeros((tplVslSpcPix + (aryStatsMap.shape[-1],)),
+                         dtype=np.float32)
+
+    # Loop over voxels
+    for indVxl, (vecVxlPrm, aryVxlMap) in enumerate(zip(aryPrm, aryStatsMap)):
+        # Extract winner parameters for this voxel
+        varPosX, varPosY, varSd = vecVxlPrm[0], vecVxlPrm[1], vecVxlPrm[2]
+        # Do not continue the for-loop for voxels that have a standard
+        # deviation of 0 pixels
+        if np.isclose(varSd, 0, atol=1e-04):
+            continue
+        else:
+            # Recreate the winner 2D Gaussian
+            aryTmpGss = crt_2D_gauss(tplVslSpcPix[0], tplVslSpcPix[1],
+                                     varPosX, varPosY, varSd)
+            # Add Gaussians for this region
+            aryAddGss += aryTmpGss
+            # Create the projection of stats map into visual field
+            aryTmpPrj = np.multiply(aryTmpGss[:, :, None],
+                                    aryVxlMap)
+            # Add projection for this region
+            aryAddPrj += aryTmpPrj
+
+    # Normalize the projection
+    aryPrj = np.divide(aryAddPrj, aryAddGss[:, :, None])
+
+    return aryPrj
 
 
 def bootstrap_resample(aryX, varLen=None):
@@ -358,11 +514,11 @@ def bootstrap_resample(aryX, varLen=None):
     References
     -------
     [1] Modified from: https://gist.github.com/aflaxman/6871948
-    
+
     """
     if varLen == None:
         varLen = len(aryX)
-        
+
     resample_i = np.floor(np.random.rand(varLen)*len(aryX)).astype(int)
     aryRsm = aryX[resample_i]
     return aryRsm

@@ -49,17 +49,25 @@ lstPathNiiPrm = ['~/prmXpos.nii', '~/prmYpos.nii', '~/prmSigma.nii']
 lstPathNiiMask = ['~/maskV1.nii', '~/maskV2.nii', '~/maskV3.nii', '~/fnc04.nii']
 
 # Path to nii files with threshold map.
-# Provide empty string if thresholding is undesired.
+# Optional, provide empty string if thresholding is undesired.
 strPathNiiThr = '~/R2.nii'
 
 # Provide threshold value for threshold map.
-# Will be ignored if no threshold map is provided.
-varThr = 0.2
+# Optional, will be ignored if no threshold map is provided.
+varThr = 0.20
 
 # Number of bootstraps of the FOV.
-# Set to 0 if no bootstrapping is desired.
+# Optional, set to 0 if bootstrapping is not desired.
 varNumBts = 50
+
+# Path to nii files with stats maps that should be projected into visual space.
+# Optional, provide list of empty string if projection is not desired.
+lstPathNiiStats = ['']
+
+# Should the provided stats maps be preprocessed?
+# Set this to 'psc', 'zscore' or None
+# Optional, will be ignored if no stats maps are provided.
+strPrepro = 'none'
 
 # Output basename:
 strPathOut = '~/pRF_results/pRF_results'
-

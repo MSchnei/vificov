@@ -134,6 +134,20 @@ def load_config(strCsvCnfg):
         print('---Number of bootstraps of the FOV: '
               + str(dicCnfg['varNumBts']))
 
+    # Path to nii files with stats maps that should be projected into visual
+    # space
+    dicCnfg['lstPathNiiStats'] = ast.literal_eval(dicCnfg['lstPathNiiStats'])
+    if lgcPrint:
+        print('---Path(s) to nii file(s) with stats maps:')
+        for strTmp in dicCnfg['lstPathNiiStats']:
+            print('   ' + str(strTmp))
+
+    # Should the provided stats maps be preprocessed?
+    dicCnfg['strPrepro'] = ast.literal_eval(dicCnfg['strPrepro'])
+    if lgcPrint:
+        print('---Stats maps preprocessing:')
+        print('   ' + str(dicCnfg['strPrepro']))
+
     # Output basename:
     dicCnfg['strPathOut'] = ast.literal_eval(dicCnfg['strPathOut'])
     if lgcPrint:

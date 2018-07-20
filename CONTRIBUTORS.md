@@ -1,5 +1,6 @@
-Maintainers:  
-Marian Schneider  
+Maintainers:
+Marian Schneider
 
-Contributors:  
-Omer Faruk Gulban (Logo)
+Contributors:
+Ingo Marquardt (code)
+Omer Faruk Gulban (logo)
