@@ -76,7 +76,7 @@ def prep_func(lstPathNiiMask, lstPathNiiFunc, strPrepro=None):
         List of paths of functional data (3D or 4D nii files).
     strPrepro : NoneType or string
         Flag to determine the preprocessing that will be performed on files.
-        Accepeted options are: None, 'demean', 'psc', or 'zscore'. 
+        Accepeted options are: None, 'demean', 'psc', or 'zscore'.
 
     Returns
     -------
@@ -107,39 +107,39 @@ def prep_func(lstPathNiiMask, lstPathNiiFunc, strPrepro=None):
 
     # prepare output list
     lstFuncOut = [None] * len(lstPathNiiMask)
-    
+
     # loop over different masks that were provided by the user
     for indMsk, strPathNiiMask in enumerate(lstPathNiiMask):
-        
+
         print('------Mask number ' + str(indMsk+1))
 
         # Load mask (to restrict model fitting) as boolean:
         aryLgcMsk, hdrMsk, aryAff = loadNiiData(strPathNiiMask, typPrc=np.bool)
-    
+
         # Dimensions of nii data:
         tplNiiShp = aryLgcMsk.shape
-    
+
         # List for arrays with functional data (possibly several runs):
         lstFunc = []
-    
+
         # Number of runs:
         varNumRun = len(lstPathNiiFunc)
-    
+
         # Loop through runs and load data:
         for idxRun in range(varNumRun):
-    
+
             print(('---------Prepare run ' + str(idxRun + 1)))
-    
+
             # Load 4D nii data:
             aryTmpFunc, _, _ = loadNiiData(lstPathNiiFunc[idxRun])
-    
+
             # Apply mask:
             aryTmpFunc = aryTmpFunc[aryLgcMsk, ...]
-            
+
             # make sure that aryTmpFunc is two-dimensional
             if len(aryTmpFunc.shape) == 1:
                 aryTmpFunc = aryTmpFunc.reshape(-1, 1)
-    
+
             # perform preprocessing, if desired by user
             if strPrepro == 'demean':
                 # De-mean functional data:
@@ -148,7 +148,7 @@ def prep_func(lstPathNiiMask, lstPathNiiFunc, strPrepro=None):
                     aryTmpFunc, np.mean(aryTmpFunc,
                                         axis=1,
                                         dtype=np.float32)[:, None])
-    
+
             if strPrepro == 'psc':
                 # Get percent signal change of functional data:
                 print('------------Get percent signal change')
@@ -157,8 +157,8 @@ def prep_func(lstPathNiiMask, lstPathNiiFunc, strPrepro=None):
                 aryTmpLgc = np.greater(aryTmpStd, np.array([0.0]))
                 aryTmpFunc[aryTmpLgc, :] = np.divide(
                     aryTmpFunc[aryTmpLgc, :],
-                    aryTmpMean[aryTmpLgc, None])
-    
+                    aryTmpMean[aryTmpLgc, None]) * 100 - 100
+
             if strPrepro == 'zscore':
                 # Score functional data:
                 print('------------Zscore')
@@ -170,17 +170,17 @@ def prep_func(lstPathNiiMask, lstPathNiiFunc, strPrepro=None):
                 aryTmpLgc = np.greater(aryTmpStd, np.array([0.0]))
                 aryTmpFunc[aryTmpLgc, :] = np.divide(
                     aryTmpFunc[aryTmpLgc, :], aryTmpStd[aryTmpLgc, None])
-    
+
             # Put prepared functional data of current run into list:
             lstFunc.append(aryTmpFunc)
             del(aryTmpFunc)
-    
+
         # Put functional data from separate runs into one array. 2D array of
         # the form aryFunc[voxelCount, time]
         aryFunc = np.concatenate(lstFunc, axis=1).astype(np.float32,
                                                          copy=False)
         del(lstFunc)
-        
+
         # Put functional array for this paricular mask away to output list
         lstFuncOut[indMsk] = aryFunc
 
@@ -351,7 +351,7 @@ def rmp_deg_pixel_xys(vecX, vecY, vecPrfSd, tplPngSize,
 
     # Convert prf sizes from degrees of visual angles to pixel
     vecPrfSdpxl = np.multiply(vecPrfSd, varDgr2PixX)
-    
+
     # Return new values in column stack.
     # Since values are now in pixel, they should be integer
     return np.column_stack((vecXpxl, vecYpxl, vecPrfSdpxl)).astype(np.int32)
@@ -393,7 +393,7 @@ def crt_2D_gauss(varSizeX, varSizeY, varPosX, varPosY, varSd):
         (2.0 * np.square(varSd))
         )
     aryGauss = np.exp(-aryGauss) / (2 * np.pi * np.square(varSd))
-    
+
     # because we assume later (when plugging in the winner parameters) that the
     # origin of the created 2D Gaussian was in the lower left and that the
     # first axis of the array indexes the left-right direction of the screen
@@ -459,7 +459,7 @@ def crt_fov(aryPrm, tplVslSpcPix):
 
     # Divide by total number of Gaussians that were included
     aryAddGss /= varDivCnt
-    
+
     return aryAddGss, aryMaxGss
 
 
@@ -492,7 +492,7 @@ def crt_prj(aryPrm, aryStatsMap, tplVslSpcPix):
 
     # Normalize the projection
     aryPrj = np.divide(aryAddPrj, aryAddGss[:, :, None])
-    
+
     return aryPrj
 
 
@@ -514,11 +514,11 @@ def bootstrap_resample(aryX, varLen=None):
     References
     -------
     [1] Modified from: https://gist.github.com/aflaxman/6871948
-    
+
     """
     if varLen == None:
         varLen = len(aryX)
-        
+
     resample_i = np.floor(np.random.rand(varLen)*len(aryX)).astype(int)
     aryRsm = aryX[resample_i]
     return aryRsm
