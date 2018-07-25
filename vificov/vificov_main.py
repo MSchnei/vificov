@@ -106,10 +106,10 @@ def run_vificov(strCsvCnfg):
                                            aryPrm[:, 1],
                                            aryPrm[:, 2],
                                            cfg.tplVslSpcPix,
-                                           int(cfg.varXminDeg),
-                                           int(cfg.varXmaxDeg),
-                                           int(cfg.varYminDeg),
-                                           int(cfg.varYmaxDeg))
+                                           cfg.varXminDeg,
+                                           cfg.varXmaxDeg,
+                                           cfg.varYminDeg,
+                                           cfg.varYmaxDeg)
 
     # %% Create visual field coverage images
     print('---Create visual field coverage images')

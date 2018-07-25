@@ -314,7 +314,7 @@ def rmp_deg_pixel_xys(vecX, vecY, vecPrfSd, tplPngSize,
         Extent of visual space from centre in negative x-direction (width)
     varExtXmax : float
         Extent of visual space from centre in positive x-direction (width)
-    varExtYmin : int
+    varExtYmin : float
         Extent of visual space from centre in negative y-direction (height)
     varExtYmax : float
         Extent of visual space from centre in positive y-direction (height)
@@ -339,8 +339,8 @@ def rmp_deg_pixel_xys(vecX, vecY, vecPrfSd, tplPngSize,
     # We calculate the scaling factor from degrees of visual angle to
     # pixels separately for the x- and the y-directions (the two should
     # be the same).
-    varDgr2PixX = tplPngSize[0] / (varExtXmax - varExtXmin)
-    varDgr2PixY = tplPngSize[1] / (varExtYmax - varExtYmin)
+    varDgr2PixX = np.divide(tplPngSize[0], (varExtXmax - varExtXmin))
+    varDgr2PixY = np.divide(tplPngSize[1], (varExtYmax - varExtYmin))
 
     # Check whether varDgr2PixX and varDgr2PixY are similar:
     strErrMsg = 'ERROR. The ratio of X and Y dimensions in ' + \
@@ -428,10 +428,10 @@ def crt_fov(aryPrm, tplVslSpcPix):
 
     """
 
-    # Prepare image for additive Gaussian
-    aryAddGss = np.zeros((tplVslSpcPix))
-    # Prepare image for max Gaussian
-    aryMaxGss = np.zeros((tplVslSpcPix))
+    # Prepare image for additive and max Gaussian
+    # use np.rot90 to make sure array is compatible with result of crt_2D_gauss
+    aryAddGss = np.rot90(np.zeros((tplVslSpcPix)), k=1)
+    aryMaxGss = np.rot90(np.zeros((tplVslSpcPix)), k=1)
 
     # Loop over voxels
     varDivCnt = 0
@@ -466,9 +466,10 @@ def crt_fov(aryPrm, tplVslSpcPix):
 def crt_prj(aryPrm, aryStatsMap, tplVslSpcPix):
 
     # Prepare image stack for additive Gaussian and projection
-    aryAddGss = np.zeros((tplVslSpcPix), dtype=np.float32)
-    aryAddPrj = np.zeros((tplVslSpcPix + (aryStatsMap.shape[-1],)),
-                         dtype=np.float32)
+    # use np.rot90 to make sure array is compatible with result of crt_2D_gauss
+    aryAddGss = np.rot90(np.zeros((tplVslSpcPix), dtype=np.float32), k=1)
+    aryAddPrj = np.rot90(np.zeros((tplVslSpcPix + (aryStatsMap.shape[-1],)),
+                                  dtype=np.float32), k=1, axes=(0, 1))
 
     # Loop over voxels
     for indVxl, (vecVxlPrm, aryVxlMap) in enumerate(zip(aryPrm, aryStatsMap)):
