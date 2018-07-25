@@ -145,8 +145,8 @@ def run_vificov(strCsvCnfg):
 
             # initialize arrays that can function as accumulators of the
             # visual field coverage map created on every bootstrap fold
-            aryBtsAddGss = np.zeros((cfg.tplVslSpcPix))
-            aryBtsMaxGss = np.zeros((cfg.tplVslSpcPix))
+            aryBtsAddGss = np.rot90(np.zeros((cfg.tplVslSpcPix)), k=1)
+            aryBtsMaxGss = np.rot90(np.zeros((cfg.tplVslSpcPix)), k=1)
 
             # get number of voxels in ROI
             varNumVxl = aryPrm.shape[0]
