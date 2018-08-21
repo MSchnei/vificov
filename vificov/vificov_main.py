@@ -31,7 +31,7 @@ from vificov.vificov_utils import (cls_set_config, loadNiiPrm, crt_fov,
 def run_vificov(strCsvCnfg):
     ###########################################################################
 #    # debugging
-#    strCsvCnfg = '/home/marian/Documents/Testing/vificov_testing/config_custom.csv'
+#    strCsvCnfg = '/home/marian/Documents/Testing/FOV_VOTRC/FOV_VOTRC/config_default_motion.csv'
     ###########################################################################
     # %% Load parameters and files
 
@@ -123,7 +123,7 @@ def run_vificov(strCsvCnfg):
         print('------for ROI ' + str(indRoi+1))
 
         # Run functyion to create visual field coverage
-        # Return both the reulst of the additive and maximum method
+        # Return both the result of the additive and maximum method
         aryAddGss, aryMaxGss = crt_fov(aryPrm, cfg.tplVslSpcPix)
 
         # Put outputs away to list
@@ -145,6 +145,9 @@ def run_vificov(strCsvCnfg):
 
             # initialize arrays that can function as accumulators of the
             # visual field coverage map created on every bootstrap fold
+            # use np.rot90 to make sure array is compatible with result of
+            # crt_fov and crt_2D_gauss
+
             aryBtsAddGss = np.rot90(np.zeros((cfg.tplVslSpcPix)), k=1)
             aryBtsMaxGss = np.rot90(np.zeros((cfg.tplVslSpcPix)), k=1)
 
@@ -210,7 +213,7 @@ def run_vificov(strCsvCnfg):
         plt.imsave(strPthImg + '_FOV_add.png', aryAddGss, cmap='plasma',
                    format="png", vmin=0.0, vmax=np.percentile(aryAddGss, 95))
         plt.imsave(strPthImg + '_FOV_max.png', aryMaxGss, cmap='magma',
-                   format="png", vmin=0.0, vmax=1.0)
+                   format="png", vmin=0.0, vmax=np.percentile(aryMaxGss, 95))
 
         if cfg.varNumBts > 0:
             plt.imsave(strPthImg + '_FOV_add_btsrp.png', aryBtsAddGss,

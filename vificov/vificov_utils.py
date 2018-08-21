@@ -399,6 +399,23 @@ def crt_2D_gauss(varSizeX, varSizeY, varPosX, varPosY, varSd):
     # first axis of the array indexes the left-right direction of the screen
     # and the second axis indexes the the top-down direction of the screen,
     # we rotate by 90 degrees clockwise
+
+
+    # Values from the pyprf estimation assume scientific convention and
+    # orientation of 2D Gaussian images with the origin in the lower left
+    # corner. x-axis occupies width and y-axis occupies the height dimension.
+    # We also assume that the first dimension that the user provides
+    # indexes x and the second indexes the y-axis. Since python is column
+    # major (i.e. first indexes columns, only then rows), we need to rotate
+    # our array by 90 degrees rightward (k=3). This will insure that with
+    # the 0th axis we index the scientific x-axis and higher values move us to
+    # the right on that x-axis. It will also ensure that the 1st
+    # python axis indexes the scientific y-axis and higher values will 
+    # move us up. However, because of the way that matplotlib displays images,
+    # where higher indices on the 0th axis are displayed lower, instead of
+    # turning our array by 90 degrees rightward (k=3), we turn it leftward
+    # (k=1). This effectively mirrors the image top-down. 
+
     aryGauss = np.rot90(aryGauss, k=1)
 
     return aryGauss
@@ -461,6 +478,53 @@ def crt_fov(aryPrm, tplVslSpcPix):
     aryAddGss /= varDivCnt
 
     return aryAddGss, aryMaxGss
+
+
+def calc_ovlp(aryPrm, lstTmplIma, tplVslSpcPix):
+    """Calculate overlap between 2d Gauss for given winner x,y,sigma
+       parameters and given input images in a list.
+
+    Parameters
+    ----------
+    aryPrm : 2D numpy array, shape [number of voxels, 3]
+        Array with x, y, and sigma winner parameters for all voxels included in
+        a given ROI
+    lstTmplIma : list
+        List with images. Each image should be a 2D numpy array with same
+        dimensions as tplVslSpcPix.
+    tplVslSpcPix : tuple
+        Tuple with the (width, height) of the visual field in pixel.
+
+    Returns
+    -------
+    aryOvlp : numpy array, shape [number of voxels, number of images in list]
+       Overlap between 2d Gauss for given winner x,y,sigma parameters and input
+       images.
+
+    Notes
+    -------
+    [1] This is a helper function that is currently not used within the vificov
+        package itself but was needed for a different analysis.
+
+    """
+
+    # Prepare array for resulting overlap results
+    aryOvlp = np.zeros((aryPrm.shape[0], len(lstTmplIma)), dtype=np.float32)
+    
+    # loop over input images in list
+    for indIma, imaTmpl in enumerate(lstTmplIma):
+        # loop over voxels
+        for indVxl, vecVxlPrm in enumerate(aryPrm):
+            # Extract winner parameters for this voxel
+            varPosX, varPosY, varSd = vecVxlPrm[0], vecVxlPrm[1], vecVxlPrm[2]
+            # Recreate the winner 2D Gaussian
+            aryTmpGss = crt_2D_gauss(tplVslSpcPix[0], tplVslSpcPix[1],
+                                     varPosX, varPosY, varSd)
+            # calculate the overlap with
+            aryOvlp[indVxl, indIma] = np.sum(
+                np.multiply(aryTmpGss, imaTmpl.astype(np.int8)), axis=(0, 1))
+
+    return aryOvlp
 
 
 def crt_prj(aryPrm, aryStatsMap, tplVslSpcPix):
