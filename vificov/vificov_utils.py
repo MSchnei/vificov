@@ -528,6 +528,28 @@ def calc_ovlp(aryPrm, lstTmplIma, tplVslSpcPix):
 
 
 def crt_prj(aryPrm, aryStatsMap, tplVslSpcPix):
+    """Create projection of statistical map(s) into visual field.
+
+    Parameters
+    ----------
+    aryPrm : 2D numpy array, shape [number voxels, 3]
+        Array with x, y, and sigma winner parameters for all voxels included in
+        a given ROI
+    aryStatsMap : 2D numpy array, shape [number voxels, time / number of maps]
+        2D numpy array with stats map / prepared functional data.
+    tplVslSpcPix : tuple
+        Tuple with the (width, height) of the visual field in pixel.
+
+    Returns
+    -------
+    aryPrj : 3D numpy array, shape [tplVslSpcPix, time / number of maps]
+       Projection of statistical map(s) into visual field.
+    aryAddPrj : 3D numpy array, shape [tplVslSpcPix, time / number of maps]
+       Unnormalized projection of statistical map(s) into visual field.
+    aryAddGss : 2D numpy array, shape [tplVslSpcPix]
+       Normalizing denominator of map(s) projection into visual field.
+
+    """
 
     # Prepare image stack for additive Gaussian and projection
     # use np.rot90 to make sure array is compatible with result of crt_2D_gauss
@@ -558,7 +580,7 @@ def crt_prj(aryPrm, aryStatsMap, tplVslSpcPix):
     # Normalize the projection
     aryPrj = np.divide(aryAddPrj, aryAddGss[:, :, None])
 
-    return aryPrj
+    return aryPrj, aryAddPrj, aryAddGss
 
 
 def bootstrap_resample(aryX, varLen=None):
