@@ -23,6 +23,8 @@ import numpy as np
 import scipy as sp
 import warnings
 import nibabel as nb
+import matplotlib
+import matplotlib.pyplot as plt
 
 
 def loadNiiData(strPathNii, typPrc=None):
@@ -82,7 +84,7 @@ def prep_func(lstPathNiiMask, lstPathNiiFunc, strPrepro=None):
     -------
     aryLgcMsk : np.array
         3D numpy array with logial values. Externally supplied mask (e.g grey
-        matter mask). Voxels that are `False` in the mask are excluded.
+        matter mask). Voxels that are 'False' in the mask are excluded.
     hdrMsk : nibabel-header-object
         Nii header of mask.
     aryAff : np.array
@@ -611,6 +613,72 @@ def bootstrap_resample(aryX, varLen=None):
     return aryRsm
 
 
+def shift_cmap(cmap, start=0, midpoint=0.5, stop=1.0, name='shiftedcmap'):
+    """Function to offset the "center" of a colormap. Useful for
+    data with a negative min and positive max and you want the
+    middle of the colormap's dynamic range to be at zero.
+
+    Parameters
+    ----------
+      cmap : matplotlib colormap object
+          The matplotlib colormap to be altered.
+      start : float, default 0.0
+          Offset from lowest point in the colormap's range.
+          Should be between 0.0 and 'midpoint'.
+      midpoint : float, default 0.5
+          The new center of the colormap. Defaults of 0.5 means no shift.
+          Should be between 0.0 and 1.0. In general, this should be
+          1 - vmax / (vmax + abs(vmin)). For example if your data range from
+          -15.0 to +5.0 and you want the center of the colormap at 0.0,
+          'midpoint' should be set to  1 - 5/(5 + 15)) or 0.75
+      stop : float, default 1.0
+          Offset from highest point in the colormap's range.
+          Defaults to 1.0 (no upper offset). Should be between
+          'midpoint' and 1.0.
+
+    Returns
+    -------
+    newcmap : matplotlib colormap object
+          The new matplotlib colormap.
+
+    References
+    -------
+    [1] Taken from stackoverflow:
+        https://stackoverflow.com/questions/7404116/defining-the-midpoint-
+        of-a-colormap-in-matplotlib
+
+    """
+
+    cdict = {
+        'red': [],
+        'green': [],
+        'blue': [],
+        'alpha': []
+        }
+
+    # regular index to compute the colors
+    reg_index = np.linspace(start, stop, 257)
+
+    # shifted index to match the data
+    shift_index = np.hstack([
+        np.linspace(0.0, midpoint, 128, endpoint=False), 
+        np.linspace(midpoint, 1.0, 129, endpoint=True)
+    ])
+
+    for ri, si in zip(reg_index, shift_index):
+        r, g, b, a = cmap(ri)
+
+        cdict['red'].append((si, r, r))
+        cdict['green'].append((si, g, g))
+        cdict['blue'].append((si, b, b))
+        cdict['alpha'].append((si, a, a))
+
+    newcmap = matplotlib.colors.LinearSegmentedColormap(name, cdict)
+    plt.register_cmap(cmap=newcmap)
+
+    return newcmap
+
+
 class cls_set_config(object):
     """
     Set config parameters from dictionary into local namespace.
@@ -619,8 +687,8 @@ class cls_set_config(object):
     ----------
     dicCnfg : dict
         Dictionary containing parameter names (as keys) and parameter values
-        (as values). For example, `dicCnfg['varTr']` contains a float, such as
-        `2.94`.
+        (as values). For example, 'dicCnfg['varTr']' contains a float, such as
+        '2.94'.
 
     """
 
