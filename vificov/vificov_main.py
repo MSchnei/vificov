@@ -122,7 +122,7 @@ def run_vificov(strCsvCnfg):
     for indRoi, aryPrm in enumerate(lstPrmAry):
         print('------for ROI ' + str(indRoi+1))
 
-        # Run functyion to create visual field coverage
+        # Run function to create visual field coverage
         # Return both the result of the additive and maximum method
         aryAddGss, aryMaxGss = crt_fov(aryPrm, cfg.tplVslSpcPix)
 
@@ -180,15 +180,20 @@ def run_vificov(strCsvCnfg):
 
         # Prepare list for normalized projections
         lstPrj = [None] * len(lstStatMaps)
+        lstUnnrmPrj = [None] * len(lstStatMaps)
+        lstNrmDen = [None] * len(lstStatMaps)
 
         # Loop over ROIs
         for indRoi, (aryPrm, aryMap) in enumerate(zip(lstPrmAry, lstStatMaps)):
             print('------for ROI ' + str(indRoi+1))
 
-            aryPrj = crt_prj(aryPrm, aryMap, cfg.tplVslSpcPix)
+            aryPrj, aryUnnrmPrj, aryNrmDen = crt_prj(aryPrm, aryMap,
+                                                     cfg.tplVslSpcPix)
 
             # Put projection away to list
             lstPrj[indRoi] = aryPrj
+            lstUnnrmPrj[indRoi] = aryUnnrmPrj
+            lstNrmDen[indRoi] = aryNrmDen
 
     # %% Save visual field coverage images to disk
     print('---Save visual field coverage images to disk')
@@ -209,12 +214,13 @@ def run_vificov(strCsvCnfg):
         # Derive output path
         strPthImg = cfg.strPathOut + '_' + strPthFln
 
-        # save arrays as images
+        # Save visual field projections as images
         plt.imsave(strPthImg + '_FOV_add.png', aryAddGss, cmap='plasma',
                    format="png", vmin=0.0, vmax=np.percentile(aryAddGss, 95))
         plt.imsave(strPthImg + '_FOV_max.png', aryMaxGss, cmap='magma',
                    format="png", vmin=0.0, vmax=np.percentile(aryMaxGss, 95))
 
+        # Save bootstrapped visual field projections as images
         if cfg.varNumBts > 0:
             plt.imsave(strPthImg + '_FOV_add_btsrp.png', aryBtsAddGss,
                        cmap='viridis', format="png", vmin=0.0,
@@ -222,11 +228,15 @@ def run_vificov(strCsvCnfg):
             plt.imsave(strPthImg + '_FOV_max_btsrp.png', aryBtsMaxGss,
                        cmap='magma', format="png", vmin=0.0, vmax=1.0)
 
+        # Save projections of statistical maps into visual space as images/npz
         if cfg.lstPathNiiStats[0]:
             # get projections for this ROI
             aryPrj = lstPrj[ind]
+            aryUnnrmPrj = lstUnnrmPrj[ind]
+            aryNrmDen = lstNrmDen[ind]
             # save arrays in list as npz files
-            np.savez(strPthImg, aryPrj=aryPrj)
+            np.savez(strPthImg, aryPrj=aryPrj, aryUnnrmPrj=aryUnnrmPrj,
+                     aryNrmDen=aryNrmDen)
             # get 5th percentile and 95th percentile to set limits to colormap
             varVmin = np.percentile(aryPrj.ravel(), 5, axis=0)
             vecVmax = np.percentile(aryPrj.ravel(), 95, axis=0)
