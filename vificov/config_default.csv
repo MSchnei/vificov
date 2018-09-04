@@ -67,7 +67,7 @@ lstPathNiiStats = ['']
 # Should the provided stats maps be preprocessed?
 # Set this to 'psc', 'zscore' or None
 # Optional, will be ignored if no stats maps are provided.
-strPrepro = 'none'
+strPrepro = None
 
 # Output basename:
 strPathOut = '~/pRF_results/pRF_results'
