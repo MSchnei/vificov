@@ -22,10 +22,11 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 from vificov.load_config import load_config
 from vificov.vificov_utils import (cls_set_config, loadNiiPrm, crt_fov,
                                    rmp_deg_pixel_xys, bootstrap_resample,
-                                   prep_func, crt_prj)
+                                   prep_func, crt_prj, shift_cmap)
 
 
 def run_vificov(strCsvCnfg):
@@ -252,9 +253,13 @@ def run_vificov(strCsvCnfg):
                     strPrnt = '_prjIma_0' + str(indPrj)
                 elif indPrj < 10000:
                     strPrnt = '_prjIma_' + str(indPrj)
-                # use cmap='RdBu'
+                # Create shifted colormap such that it centers on zero
+                varCnt = 1 - vecVmax / (vecVmax + abs(varVmin))
+                # calculate zero centre
+                objCmpa = shift_cmap(cm.coolwarm, midpoint=varCnt)
+                # save image
                 plt.imsave(strPthImg + strPrnt + '.png', imaPrj,
-                           cmap='coolwarm', format="png", vmin=varVmin,
+                           cmap=objCmpa, format="png", vmin=varVmin,
                            vmax=vecVmax)
 
     # %% Print done statement.
