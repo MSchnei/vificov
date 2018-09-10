@@ -580,7 +580,10 @@ def crt_prj(aryPrm, aryStatsMap, tplVslSpcPix):
             aryAddPrj += aryTmpPrj
 
     # Normalize the projection
-    aryPrj = np.divide(aryAddPrj, aryAddGss[:, :, None])
+    # The 1 is added to make the normalization stable, otherwise in areas of
+    # the visual field that are not covered by any voxels division would be by
+    # a number close to zero, resulting in extremely large numbers
+    aryPrj = np.divide(aryAddPrj, np.add(aryAddGss, 1)[:, :, None])
 
     return aryPrj, aryAddPrj, aryAddGss
 
