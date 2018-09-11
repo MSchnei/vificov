@@ -212,12 +212,18 @@ def run_vificov(strCsvCnfg):
         # Derive file name
         strPthFln = os.path.basename(
             os.path.splitext(cfg.lstPathNiiMask[ind])[0])
+        # if it was a nii.gz file, get rid of .nii leftover
+        if strPthFln[-4:] == '.nii':
+            strPthFln = strPthFln[:-4]
+
         # Derive output path
         strPthImg = cfg.strPathOut + '_' + strPthFln
 
         # Save visual field projections as images
+        varSumAdd = np.sum(aryAddGss, axis=(0, 1))
+        varVmax = np.divide(varSumAdd, len(aryAddGss.ravel()))
         plt.imsave(strPthImg + '_FOV_add.png', aryAddGss, cmap='plasma',
-                   format="png", vmin=0.0, vmax=np.percentile(aryAddGss, 95))
+                   format="png", vmin=0.0, vmax=varVmax)
         plt.imsave(strPthImg + '_FOV_max.png', aryMaxGss, cmap='magma',
                    format="png", vmin=0.0, vmax=np.percentile(aryMaxGss, 95))
 
@@ -240,7 +246,11 @@ def run_vificov(strCsvCnfg):
                      aryNrmDen=aryNrmDen)
             # get 5th percentile and 95th percentile to set limits to colormap
             varVmin = np.percentile(aryPrj.ravel(), 5, axis=0)
-            vecVmax = np.percentile(aryPrj.ravel(), 95, axis=0)
+            varVmax = np.percentile(aryPrj.ravel(), 95, axis=0)
+#            varVmin = -2.0
+#            varVmax = 5.0
+            print('------Minimum threshold: ' + str(varVmin))
+            print('------Maximum threshold: ' + str(varVmax))
             # loop over different projections
             for indPrj in range(aryPrj.shape[-1]):
                 # get particular image projection
@@ -254,13 +264,14 @@ def run_vificov(strCsvCnfg):
                 elif indPrj < 10000:
                     strPrnt = '_prjIma_' + str(indPrj)
                 # Create shifted colormap such that it centers on zero
-                varCnt = 1 - vecVmax / (vecVmax + abs(varVmin))
+                varCnt = 1 - varVmax / (varVmax + abs(varVmin))
                 # calculate zero centre
                 objCmpa = shift_cmap(cm.coolwarm, midpoint=varCnt)
+#                objCmpa = cm.viridis
                 # save image
                 plt.imsave(strPthImg + strPrnt + '.png', imaPrj,
                            cmap=objCmpa, format="png", vmin=varVmin,
-                           vmax=vecVmax)
+                           vmax=varVmax)
 
     # %% Print done statement.
     print('---Done.')
