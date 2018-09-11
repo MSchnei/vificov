@@ -21,6 +21,7 @@
 
 import os
 import numpy as np
+import nibabel as nb
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from vificov.load_config import load_config
@@ -196,19 +197,12 @@ def run_vificov(strCsvCnfg):
             lstUnnrmPrj[indRoi] = aryUnnrmPrj
             lstNrmDen[indRoi] = aryNrmDen
 
-    # %% Save visual field coverage images to disk
-    print('---Save visual field coverage images to disk')
+    # %% Save visual field coverage, and ptn boostrapped images and projections
 
+    # Loop over different regions
     for ind in range(len(lstAddGss)):
-
-        # get arrays
-        aryAddGss = lstAddGss[ind]
-        aryMaxGss = lstMaxGss[ind]
-
-        if cfg.varNumBts > 0:
-            aryBtsAddGss = lstBtsAddGss[ind]
-            aryBtsMaxGss = lstBtsMaxGss[ind]
-
+        print('---Save files to disk for ROI ' + str(ind+1))
+        
         # Derive file name
         strPthFln = os.path.basename(
             os.path.splitext(cfg.lstPathNiiMask[ind])[0])
@@ -219,6 +213,17 @@ def run_vificov(strCsvCnfg):
         # Derive output path
         strPthImg = cfg.strPathOut + '_' + strPthFln
 
+        # %% Save visual field coverage
+        print('------Save visual field coverage images')
+
+        # get arrays
+        aryAddGss = lstAddGss[ind]
+        aryMaxGss = lstMaxGss[ind]
+
+        if cfg.varNumBts > 0:
+            aryBtsAddGss = lstBtsAddGss[ind]
+            aryBtsMaxGss = lstBtsMaxGss[ind]
+
         # Save visual field projections as images
         varSumAdd = np.sum(aryAddGss, axis=(0, 1))
         varVmax = np.divide(varSumAdd, len(aryAddGss.ravel()))
@@ -227,30 +232,43 @@ def run_vificov(strCsvCnfg):
         plt.imsave(strPthImg + '_FOV_max.png', aryMaxGss, cmap='magma',
                    format="png", vmin=0.0, vmax=np.percentile(aryMaxGss, 95))
 
-        # Save bootstrapped visual field projections as images
+        # %% Save bootstrapped visual field projections as images
         if cfg.varNumBts > 0:
+            print('------Save bootstrapped visual field projections as images')
+
             plt.imsave(strPthImg + '_FOV_add_btsrp.png', aryBtsAddGss,
                        cmap='viridis', format="png", vmin=0.0,
                        vmax=np.percentile(aryAddGss, 95))
             plt.imsave(strPthImg + '_FOV_max_btsrp.png', aryBtsMaxGss,
                        cmap='magma', format="png", vmin=0.0, vmax=1.0)
 
-        # Save projections of statistical maps into visual space as images/npz
+        # %% Save projections of statistical maps as npz/nii/png files
         if cfg.lstPathNiiStats[0]:
+            print('------Save projections of statistical maps')
+
             # get projections for this ROI
             aryPrj = lstPrj[ind]
             aryUnnrmPrj = lstUnnrmPrj[ind]
             aryNrmDen = lstNrmDen[ind]
+
             # save arrays in list as npz files
+            print('------Save as npz files')
             np.savez(strPthImg, aryPrj=aryPrj, aryUnnrmPrj=aryUnnrmPrj,
                      aryNrmDen=aryNrmDen)
+
+            print('------Save as nii files')
+            imgNii = nb.Nifti1Image(aryPrj, affine=np.eye(4))
+            nb.save(imgNii, strPthImg + '.nii')
+
+            # save projections as images
+            print('------Save as png files')
+
             # get 5th percentile and 95th percentile to set limits to colormap
             varVmin = np.percentile(aryPrj.ravel(), 5, axis=0)
             varVmax = np.percentile(aryPrj.ravel(), 95, axis=0)
-#            varVmin = -2.0
-#            varVmax = 5.0
             print('------Minimum threshold: ' + str(varVmin))
             print('------Maximum threshold: ' + str(varVmax))
+
             # loop over different projections
             for indPrj in range(aryPrj.shape[-1]):
                 # get particular image projection
@@ -267,7 +285,6 @@ def run_vificov(strCsvCnfg):
                 varCnt = 1 - varVmax / (varVmax + abs(varVmin))
                 # calculate zero centre
                 objCmpa = shift_cmap(cm.coolwarm, midpoint=varCnt)
-#                objCmpa = cm.viridis
                 # save image
                 plt.imsave(strPthImg + strPrnt + '.png', imaPrj,
                            cmap=objCmpa, format="png", vmin=varVmin,
