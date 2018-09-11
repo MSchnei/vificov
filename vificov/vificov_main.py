@@ -256,18 +256,18 @@ def run_vificov(strCsvCnfg):
             np.savez(strPthImg, aryPrj=aryPrj, aryUnnrmPrj=aryUnnrmPrj,
                      aryNrmDen=aryNrmDen)
 
+            # save arrays as nii file
             print('------Save as nii files')
             imgNii = nb.Nifti1Image(aryPrj, affine=np.eye(4))
             nb.save(imgNii, strPthImg + '.nii')
 
             # save projections as images
             print('------Save as png files')
-
             # get 5th percentile and 95th percentile to set limits to colormap
             varVmin = np.percentile(aryPrj.ravel(), 5, axis=0)
             varVmax = np.percentile(aryPrj.ravel(), 95, axis=0)
-            print('------Minimum threshold: ' + str(varVmin))
-            print('------Maximum threshold: ' + str(varVmax))
+            print('---------Minimum threshold: ' + str(varVmin))
+            print('---------Maximum threshold: ' + str(varVmax))
 
             # loop over different projections
             for indPrj in range(aryPrj.shape[-1]):
