@@ -529,7 +529,7 @@ def calc_ovlp(aryPrm, lstTmplIma, tplVslSpcPix):
     return aryOvlp
 
 
-def crt_prj(aryPrm, aryStatsMap, tplVslSpcPix):
+def crt_prj(aryPrm, aryStatsMap, tplVslSpcPix, aryWght=None):
     """Create projection of statistical map(s) into visual field.
 
     Parameters
@@ -541,6 +541,9 @@ def crt_prj(aryPrm, aryStatsMap, tplVslSpcPix):
         2D numpy array with stats map / prepared functional data.
     tplVslSpcPix : tuple
         Tuple with the (width, height) of the visual field in pixel.
+    aryWght : 2D numpy array or None
+        This will be None if strAvg == 'mean'. Otherwise, this will be the
+        vector with weights, typically R2 valuyes.
 
     Returns
     -------
@@ -571,18 +574,26 @@ def crt_prj(aryPrm, aryStatsMap, tplVslSpcPix):
             # Recreate the winner 2D Gaussian
             aryTmpGss = crt_2D_gauss(tplVslSpcPix[0], tplVslSpcPix[1],
                                      varPosX, varPosY, varSd)
-            # Add Gaussians for this region
-            aryAddGss += aryTmpGss
             # Create the projection of stats map into visual field
             aryTmpPrj = np.multiply(aryTmpGss[:, :, None],
                                     aryVxlMap)
-            # Add projection for this region
-            aryAddPrj += aryTmpPrj
+            if aryWght is None:
+                # Add Gaussians for this region
+                aryAddGss += aryTmpGss
+                # Add projection for this region
+                aryAddPrj += aryTmpPrj
+            else:
+                # get weight for averaging
+                varWght = np.divide(aryWght[indVxl], np.sum(aryWght))
+                # Add Gaussians for this region, weighted by R2
+                aryAddGss += np.multiply(aryTmpGss, varWght)
+                # Add projection for this region, weighted by R2
+                aryAddPrj += np.multiply(aryTmpPrj, varWght)
 
     # Normalize the projection
     # The 1 is added to make the normalization stable, otherwise in areas of
-    # the visual field that are not covered by any voxels division would be by
-    # a number close to zero, resulting in extremely large numbers
+    # the visual field that are not covered by any voxels, division would be by
+    # a number close to zero, resulting in extremely large values
     aryPrj = np.divide(aryAddPrj, np.add(aryAddGss, 1)[:, :, None])
 
     return aryPrj, aryAddPrj, aryAddGss
