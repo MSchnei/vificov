@@ -76,7 +76,7 @@ def run_vificov(strCsvCnfg):
                                 strPrepro=cfg.strPrepro)[3]
 
     # Load weights for projection of stats values, if desired by user
-    if cfg.strPathNiiWght:
+    if cfg.lstPathNiiStats[0] and cfg.strPathNiiWght:
         # Get threshold values
         lstWght = loadNiiPrm([cfg.strPathNiiWght],
                              lstFlsMsk=cfg.lstPathNiiMask)[0]
@@ -95,7 +95,7 @@ def run_vificov(strCsvCnfg):
                 aryMap = lstStatMaps[ind]
                 lstStatMaps[ind] = aryMap[aryThr, ...]
             # Apply threshold to weight map, if they were provided
-            if cfg.strPathNiiWght:
+            if cfg.lstPathNiiStats[0] and cfg.strPathNiiWght:
                 aryWght = lstWght[ind]
                 lstWght[ind] = aryWght[aryThr, ...]
             # Check how many voxels were excluded
@@ -204,10 +204,11 @@ def run_vificov(strCsvCnfg):
         for indRoi, (aryPrm, aryMap) in enumerate(zip(lstPrmAry, lstStatMaps)):
 
             print('------for ROI ' + str(indRoi+1))
-            
+
             # If weights were provided by user, get weights for this ROI to
             # have them considered in the projection of stats values
-            if cfg.strPathNiiWght:
+            if cfg.lstPathNiiStats[0] and cfg.strPathNiiWght:
+                print('---------weighting is applied')
                 aryWght = lstWght[indRoi]
             else:
                 aryWght = None
@@ -227,7 +228,7 @@ def run_vificov(strCsvCnfg):
     # Loop over different regions
     for ind in range(len(lstAddGss)):
         print('---Save files to disk for ROI ' + str(ind+1))
-        
+
         # Derive file name
         strPthFln = os.path.basename(
             os.path.splitext(cfg.lstPathNiiMask[ind])[0])
@@ -283,15 +284,17 @@ def run_vificov(strCsvCnfg):
             # save arrays as nii file
             print('---------Save as nii files')
             imgNii = nb.Nifti1Image(aryPrj, affine=np.eye(4))
-            nb.save(imgNii, strPthImg + '.nii')
+            nb.save(imgNii, strPthImg + '.nii.gz')
 
             # save projections as images
             print('---------Save as png files')
             # get 5th percentile and 95th percentile to set limits to colormap
-            varVmin = np.percentile(aryPrj.ravel(), 5, axis=0)
-            varVmax = np.percentile(aryPrj.ravel(), 95, axis=0)
-            print('---------Minimum threshold: ' + str(varVmin))
-            print('---------Maximum threshold: ' + str(varVmax))
+            # varVmin = np.percentile(aryPrj.ravel(), 5, axis=0)
+            # varVmax = np.percentile(aryPrj.ravel(), 95, axis=0)
+            varVmin = -2.0
+            varVmax = 5.0
+            print('------------Minimum threshold: ' + str(varVmin))
+            print('------------Maximum threshold: ' + str(varVmax))
 
             # loop over different projections
             for indPrj in range(aryPrj.shape[-1]):

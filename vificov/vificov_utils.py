@@ -412,11 +412,11 @@ def crt_2D_gauss(varSizeX, varSizeY, varPosX, varPosY, varSd):
     # our array by 90 degrees rightward (k=3). This will insure that with
     # the 0th axis we index the scientific x-axis and higher values move us to
     # the right on that x-axis. It will also ensure that the 1st
-    # python axis indexes the scientific y-axis and higher values will 
+    # python axis indexes the scientific y-axis and higher values will
     # move us up. However, because of the way that matplotlib displays images,
     # where higher indices on the 0th axis are displayed lower, instead of
     # turning our array by 90 degrees rightward (k=3), we turn it leftward
-    # (k=1). This effectively mirrors the image top-down. 
+    # (k=1). This effectively mirrors the image top-down.
 
     aryGauss = np.rot90(aryGauss, k=1)
 
@@ -512,7 +512,7 @@ def calc_ovlp(aryPrm, lstTmplIma, tplVslSpcPix):
 
     # Prepare array for resulting overlap results
     aryOvlp = np.zeros((aryPrm.shape[0], len(lstTmplIma)), dtype=np.float32)
-    
+
     # loop over input images in list
     for indIma, imaTmpl in enumerate(lstTmplIma):
         # loop over voxels
@@ -591,10 +591,20 @@ def crt_prj(aryPrm, aryStatsMap, tplVslSpcPix, aryWght=None):
                 aryAddPrj += np.multiply(aryTmpPrj, varWght)
 
     # Normalize the projection
-    # The 1 is added to make the normalization stable, otherwise in areas of
-    # the visual field that are not covered by any voxels, division would be by
-    # a number close to zero, resulting in extremely large values
-    aryPrj = np.divide(aryAddPrj, np.add(aryAddGss, 1)[:, :, None])
+    # If denominator is very close to 0, then 1 is added to make the
+    # normalization stable, otherwise in areas of the visual field that are not
+    # covered by any voxels, division would be by a number close to zero,
+    # resulting in extremely large values. When denominator is away from zero
+    # add nothing
+    # aryDen = np.add(aryAddGss,
+    #                 np.divide(1.0,
+    #                           np.add(1.0,
+    #                                  np.divide(1.0,
+    #                                            -np.log2(aryAddGss)
+    #                                            ))))
+    aryDen = np.copy(aryAddGss)
+
+    aryPrj = np.divide(aryAddPrj, aryDen[:, :, None])
 
     return aryPrj, aryAddPrj, aryAddGss
 
@@ -675,7 +685,7 @@ def shift_cmap(cmap, start=0, midpoint=0.5, stop=1.0, name='shiftedcmap'):
 
     # shifted index to match the data
     shift_index = np.hstack([
-        np.linspace(0.0, midpoint, 128, endpoint=False), 
+        np.linspace(0.0, midpoint, 128, endpoint=False),
         np.linspace(midpoint, 1.0, 129, endpoint=True)
     ])
 
