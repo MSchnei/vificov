@@ -49,12 +49,6 @@ def run_vificov(strCsvCnfg):
     lstPrmAry, objHdr, aryAff = loadNiiPrm(cfg.lstPathNiiPrm,
                                            lstFlsMsk=cfg.lstPathNiiMask)
 
-    # Load x values, y and sigma values for all region of interests that were
-    # provided as masks
-    print('---Load provided parameter maps')
-    lstPrmAry, objHdr, aryAff = loadNiiPrm(cfg.lstPathNiiPrm,
-                                           lstFlsMsk=cfg.lstPathNiiMask)
-
     # Deduce number of region of interest
     cfg.varNumRois = len(lstPrmAry)
     print('------Number of ROIs found: ' + str(cfg.varNumRois))
@@ -75,12 +69,6 @@ def run_vificov(strCsvCnfg):
         lstStatMaps = prep_func(cfg.lstPathNiiMask, cfg.lstPathNiiStats,
                                 strPrepro=cfg.strPrepro)[3]
 
-    # Load weights for projection of stats values, if desired by user
-    if cfg.strPathNiiWght:
-        # Get threshold values
-        lstWght = loadNiiPrm([cfg.strPathNiiWght],
-                             lstFlsMsk=cfg.lstPathNiiMask)[0]
-
     # Apply threshold map, if desired by user
     if cfg.strPathNiiThr:
         print('---Exclude voxels based on threshold map')
@@ -88,16 +76,12 @@ def run_vificov(strCsvCnfg):
         for ind, (aryPrm, aryThr) in enumerate(zip(lstPrmAry, lstThr)):
             # Check how many voxels before selection
             varNumVxlBfr = aryPrm.shape[0]
-            # Apply threshold to pRF parameter map, to exclude voxels
+            # apply threshold boolean to exclude voxels
             lstPrmAry[ind] = aryPrm[aryThr, ...]
-            # Apply threshold to stats map, if they were provided
+            # apply threshold to stats map, if they were provided
             if cfg.lstPathNiiStats[0]:
                 aryMap = lstStatMaps[ind]
                 lstStatMaps[ind] = aryMap[aryThr, ...]
-            # Apply threshold to weight map, if they were provided
-            if cfg.strPathNiiWght:
-                aryWght = lstWght[ind]
-                lstWght[ind] = aryWght[aryThr, ...]
             # Check how many voxels were excluded
             varNumVxlExl = varNumVxlBfr - lstPrmAry[ind].shape[0]
             # print number of voxels included and excluded
@@ -184,7 +168,8 @@ def run_vificov(strCsvCnfg):
                 aryBtsAddGss += aryFldAddGss
                 aryBtsMaxGss += aryFldMaxGss
 
-            # Put away the mean bootstrap visual field map for this ROI
+            # Put away the mean bootstrap visual field map for this particular
+            # ROI
             lstBtsAddGss[indRoi] = np.divide(aryBtsAddGss,
                                              float(cfg.varNumBts))
             lstBtsMaxGss[indRoi] = np.divide(aryBtsMaxGss,
@@ -202,20 +187,10 @@ def run_vificov(strCsvCnfg):
 
         # Loop over ROIs
         for indRoi, (aryPrm, aryMap) in enumerate(zip(lstPrmAry, lstStatMaps)):
-
             print('------for ROI ' + str(indRoi+1))
-            
-            # If weights were provided by user, get weights for this ROI to
-            # have them considered in the projection of stats values
-            if cfg.strPathNiiWght:
-                aryWght = lstWght[indRoi]
-            else:
-                aryWght = None
 
-            # Create visual field projections for this ROI
             aryPrj, aryUnnrmPrj, aryNrmDen = crt_prj(aryPrm, aryMap,
-                                                     cfg.tplVslSpcPix,
-                                                     aryWght=aryWght)
+                                                     cfg.tplVslSpcPix)
 
             # Put projection away to list
             lstPrj[indRoi] = aryPrj
@@ -234,6 +209,7 @@ def run_vificov(strCsvCnfg):
         # if it was a nii.gz file, get rid of .nii leftover
         if strPthFln[-4:] == '.nii':
             strPthFln = strPthFln[:-4]
+
         # Derive output path
         strPthImg = cfg.strPathOut + '_' + strPthFln
 
@@ -276,17 +252,17 @@ def run_vificov(strCsvCnfg):
             aryNrmDen = lstNrmDen[ind]
 
             # save arrays in list as npz files
-            print('---------Save as npz files')
+            print('------Save as npz files')
             np.savez(strPthImg, aryPrj=aryPrj, aryUnnrmPrj=aryUnnrmPrj,
                      aryNrmDen=aryNrmDen)
 
             # save arrays as nii file
-            print('---------Save as nii files')
+            print('------Save as nii files')
             imgNii = nb.Nifti1Image(aryPrj, affine=np.eye(4))
             nb.save(imgNii, strPthImg + '.nii')
 
             # save projections as images
-            print('---------Save as png files')
+            print('------Save as png files')
             # get 5th percentile and 95th percentile to set limits to colormap
             varVmin = np.percentile(aryPrj.ravel(), 5, axis=0)
             varVmax = np.percentile(aryPrj.ravel(), 95, axis=0)
