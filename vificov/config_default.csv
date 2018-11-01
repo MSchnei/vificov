@@ -69,11 +69,5 @@ lstPathNiiStats = ['']
 # Optional, will be ignored if no stats maps are provided.
 strPrepro = None
 
-# Path to nii file with weights. Will be used for a weighted average, combining
-# values in stats map by giving more weight to some voxels than others.
-# Optional, provide empty string if unequal weights are undesired.
-# Will be ignored if lstPathNiiStats is provided as list of empty string.
-strPathNiiWght = '~/R2.nii'
-
 # Output basename:
 strPathOut = '~/pRF_results/pRF_results'

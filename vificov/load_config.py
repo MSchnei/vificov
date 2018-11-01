@@ -148,13 +148,16 @@ def load_config(strCsvCnfg):
         print('---Stats maps preprocessing:')
         print('   ' + str(dicCnfg['strPrepro']))
 
-    # Path to nii file with weights. Will be used for a weighted average,
-    # combining values in stats map by giving more weight to some voxels than
-    # others.
-    dicCnfg['strPathNiiWght'] = ast.literal_eval(dicCnfg['strPathNiiWght'])
-    if lgcPrint:
-        print('---Path to nii files with weights for averaging:')
-        print('   ' + str(dicCnfg['strPathNiiWght']))
+    # Path to nii file with weights for combining voxels in stats map
+    # projection via weighted average. If not provided, the voxel values are
+    # combined with an equal weight per voxel, aka by taking the mean
+    if 'strPathNiiWght' in dicCnfg:
+        dicCnfg['strPathNiiWght'] = ast.literal_eval(dicCnfg['strPathNiiWght'])
+        if lgcPrint:
+            print('---Path to nii files with weights for averaging:')
+            print('   ' + str(dicCnfg['strPathNiiWght']))
+    else:
+        dicCnfg['strPathNiiThr'] = None
 
     # Output basename:
     dicCnfg['strPathOut'] = ast.literal_eval(dicCnfg['strPathOut'])
