@@ -423,6 +423,113 @@ def crt_2D_gauss(varSizeX, varSizeY, varPosX, varPosY, varSd):
     return aryGauss
 
 
+def get_strd_ind(varInd, varVslSpcPix, varStrdWdth=1):
+    """Given an index, create striding window for indexing.
+
+    Parameters
+    ----------
+    varInd : integer
+        Integer on which the striding window will center.
+    varVslSpcPix : integer
+        Integer with the width or height of the visual field in pixel.
+    varStrdWdth : integer
+        Integer that describes the width of the striding window.
+
+    Returns
+    -------
+    lstStrdInd : list
+        List of striding indices.
+
+    """
+    
+    # Make sure varInd and varStrdWdth are integers
+    varInd = int(varInd)
+    varStrdWdth = int(varStrdWdth)
+    
+    # Create list around centre index.
+    lstStrdInd = np.arange(varInd-varStrdWdth, varInd+varStrdWdth+1)
+    
+    # Exclude indices that go out of the image array
+    lstStrdInd = lstStrdInd[np.logical_and(lstStrdInd >= 0,
+                                           lstStrdInd < varVslSpcPix)]
+    
+    return lstStrdInd
+
+
+def get_bin_prf_ima(tplCentre, tplVslSpcPix, varSd=1):
+    """Create create binary pRF image.
+
+    Parameters
+    ----------
+    tplCentre : tuple
+        Pixel on which the pRF centers.
+    tplVslSpcPix : tuple
+        Tuple with the width and height of the visual field in pixel.
+    varSd : integer
+        Integer that describes the size of the pRF in pixel.
+
+    Returns
+    -------
+    aryBinPrfIma : 2D numpy array
+        Binary pRF image.
+
+    """
+    # Sort input and make sure it is integer value
+    varPosX, varPosY = int(tplCentre[0]), int(tplCentre[1])
+    varSizeX, varSizeY = int(tplVslSpcPix[0]), int(tplVslSpcPix[1])
+
+    # Create x and y in meshgrid:
+    aryX, aryY = sp.mgrid[0:varSizeX, 0:varSizeY]
+
+    # The actual creation of the Gaussian array:    
+    aryR = np.sqrt((aryX - varPosX)**2+(aryY - varPosY)**2)
+    
+    return np.less_equal(aryR, varSd).astype(np.int8)
+
+
+
+def crt_cntr_dot(aryPrm, tplVslSpcPix, lgcNrm=False):
+    """Create image for pRF centre dots.
+    
+    Parameters
+    ----------
+    aryPrm : 2D numpy array, shape [number of voxels, 3]
+        Array with x, y, and sigma winner parameters for all voxels included in
+        a given ROI
+    tplVslSpcPix : tuple
+        Tuple with the (width, height) of the visual field in pixel.
+    lgcNrm : boolean
+        Should returned array be normalizes such that max value is 1?
+
+    Returns
+    -------
+    aryCntrDts : 2D numpy array
+        Image of pRF centers. Values of 1 where centre and zero values
+        elsewhere.
+
+    """
+
+    # Prepare image for pRF centre dots
+    aryCntrDts = np.zeros((tplVslSpcPix), dtype=np.int8)
+    
+    for indVxl, vecVxlPrm in enumerate(aryPrm):
+        # Extract x and y winner parameters for this voxel
+        varPosX, varPosY = vecVxlPrm[0], vecVxlPrm[1]
+        
+        # Add 1 to pixel at pRF centre (and, if desired, surrounding pixels)
+        aryCntrDts[get_strd_ind(varPosX, tplVslSpcPix[0])[:, np.newaxis],
+                   get_strd_ind(varPosY, tplVslSpcPix[1])] += 1
+
+    # Use np.rot90 to make sure array is compatible with result of crt_2D_gauss
+    aryCntrDts = np.rot90(aryCntrDts, k=1)
+    
+    # If desired by user, normalize the array
+    if lgcNrm:
+        aryCntrDts[aryCntrDts>0] = 1
+    
+    return aryCntrDts
+
+
 def crt_fov(aryPrm, tplVslSpcPix):
     """Create field of view for given winner x,y,sigma parameters.
 
@@ -439,11 +546,9 @@ def crt_fov(aryPrm, tplVslSpcPix):
     aryAddGss : 2d numpy array, shape [width, height]
         Visual field coverage using the additive method.
     aryMaxGss : 2d numpy array, shape [width, height]
-        Visual field coverage using maximum method.
-
-    References
-    -------
-    [1]
+        Visual field coverage using maximum method with normalized Gaussian.
+    aryKayGss : 2d numpy array, shape [width, height]
+        Visual field coverage using Kay method.
 
     """
 
@@ -451,6 +556,7 @@ def crt_fov(aryPrm, tplVslSpcPix):
     # use np.rot90 to make sure array is compatible with result of crt_2D_gauss
     aryAddGss = np.rot90(np.zeros((tplVslSpcPix)), k=1)
     aryMaxGss = np.rot90(np.zeros((tplVslSpcPix)), k=1)
+    aryKayGss = np.rot90(np.zeros((tplVslSpcPix)), k=1)
 
     # Loop over voxels
     varDivCnt = 0
@@ -460,7 +566,7 @@ def crt_fov(aryPrm, tplVslSpcPix):
         # Do not continue the for-loop for voxels that have a standard
         # deviation of 0 pixels
         if np.isclose(varSd, 0, atol=1e-04):
-            continue
+            warnings.warn("Voxel skipped because SD equals 0")
         else:
             # Recreate the winner 2D Gaussian
             aryTmpGss = crt_2D_gauss(tplVslSpcPix[0], tplVslSpcPix[1],
@@ -469,17 +575,26 @@ def crt_fov(aryPrm, tplVslSpcPix):
                 warnings.warn("NaN value encountered in 2D Gaussian")
             # Add Gaussians for this region
             aryAddGss += aryTmpGss
-            # Replace pixels for which aryTmpGss is greater than aryMaxGss
+
+            # Normalize such that the maximum pixel has value 1.0
             aryTmpGssNrm = np.divide(aryTmpGss, aryTmpGss.max())
+            # Find pixels where value has never been that high before
             lgcMaxGss = np.greater(aryTmpGssNrm, aryMaxGss)
+            # Copy values for those pixels
             aryMaxGss[lgcMaxGss] = np.copy(aryTmpGssNrm[lgcMaxGss])
+            
+            # Implement Kay method
+            aryKayGss += get_bin_prf_ima((varPosX, varPosY), tplVslSpcPix,
+                                         varSd=2*varSd)
+
             # Add to division couner
             varDivCnt += 1
 
     # Divide by total number of Gaussians that were included
     aryAddGss /= varDivCnt
+    aryKayGss /= varDivCnt
 
-    return aryAddGss, aryMaxGss
+    return aryAddGss, aryMaxGss, aryKayGss
 
 
 def calc_ovlp(aryPrm, lstTmplIma, tplVslSpcPix):
@@ -583,7 +698,9 @@ def crt_prj(aryPrm, aryStatsMap, tplVslSpcPix):
     # The 1 is added to make the normalization stable, otherwise in areas of
     # the visual field that are not covered by any voxels division would be by
     # a number close to zero, resulting in extremely large numbers
-    aryPrj = np.divide(aryAddPrj, np.add(aryAddGss, 1)[:, :, None])
+#    aryPrj = np.divide(aryAddPrj, np.add(aryAddGss, 1)[:, :, None])
+    aryPrj = np.divide(aryAddPrj, aryAddGss[:, :, None])
+
 
     return aryPrj, aryAddPrj, aryAddGss
 
