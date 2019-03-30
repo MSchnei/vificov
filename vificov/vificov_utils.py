@@ -714,8 +714,8 @@ def crt_fov(aryPrm, arySptExpInf, tplVslSpcPix):
 
     Notes
     ----------
-    [1] Each of the returned arrays fro visual field coverage is created
-        according to a different emthod that was described in the literature.
+    [1] Each of the returned arrays for visual field coverage is created
+        according to a different method that was described in the literature.
         See references, which are in respective order.
 
     References
@@ -750,7 +750,9 @@ def crt_fov(aryPrm, arySptExpInf, tplVslSpcPix):
                        axis=1)
 
     # Loop over voxels
-    varDivCnt = 0
+    varDivCntGss = 0
+    varDivCntKay = 0
+
     for indVxl, vecVxlPrm in enumerate(aryPrm):
         # Extract winner parameters for this voxel
         varPosX, varPosY, varSd = vecVxlPrm[0], vecVxlPrm[1], vecVxlPrm[2]
@@ -765,7 +767,6 @@ def crt_fov(aryPrm, arySptExpInf, tplVslSpcPix):
             if np.sum(np.isnan(aryTmpGss)) > 1:
                 warnings.warn("NaN value encountered in 2D Gaussian")
 
-
             # Normalize such that the maximum pixel has value 1.0
             aryTmpGssNrm = np.divide(aryTmpGss, aryTmpGss.max())
             
@@ -776,24 +777,25 @@ def crt_fov(aryPrm, arySptExpInf, tplVslSpcPix):
             lgcMaxGss = np.greater(aryTmpGssNrm, aryMaxGss)
             # Copy values for those pixels
             aryMaxGss[lgcMaxGss] = np.copy(aryTmpGssNrm[lgcMaxGss])
-            
+
+            # Add to division couner
+            varDivCntGss += 1
+
             # Implement Kay method
             if vecMaxRsp[indVxl] > 0.0:
                 aryKayGss += np.divide(get_bin_prf_ima((varPosX, varPosY),
                                                        tplVslSpcPix,
                                                        varSd=2*varSd),
                                        np.sqrt(vecMaxRsp[indVxl]))
+                # Add to division couner
+                varDivCntKay += 1
+
             else:
                 print('No response to stimuli for this voxel')
-                # subtract from division counter to undo addition next line
-                varDivCnt -= 1
-
-            # Add to division couner
-            varDivCnt += 1
 
     # Divide by total number of Gaussians that were included
-    aryAddGss /= varDivCnt
-    aryKayGss /= varDivCnt
+    aryAddGss /= varDivCntGss
+    aryKayGss /= varDivCntKay
 
     return aryAddGss, aryMaxGss, aryKayGss
 
@@ -872,8 +874,10 @@ def crt_prj(aryPrm, aryStatsMap, tplVslSpcPix):
     # Prepare image stack for additive Gaussian and projection
     # use np.rot90 to make sure array is compatible with result of crt_2D_gauss
     aryAddGss = np.rot90(np.zeros((tplVslSpcPix), dtype=np.float32), k=1)
-    aryAddPrj = np.rot90(np.zeros((tplVslSpcPix + (aryStatsMap.shape[-1],)),
-                                  dtype=np.float32), k=1, axes=(0, 1))
+    aryAddPrj = np.zeros((tplVslSpcPix + (aryStatsMap.shape[-1],)),
+                         dtype=np.float32)
+    for indRot in range(aryStatsMap.shape[-1]):
+        aryAddPrj[..., indRot] = np.rot90(aryAddPrj[..., indRot], k=1)
 
     # Loop over voxels
     for indVxl, (vecVxlPrm, aryVxlMap) in enumerate(zip(aryPrm, aryStatsMap)):
