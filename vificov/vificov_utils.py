@@ -778,10 +778,15 @@ def crt_fov(aryPrm, arySptExpInf, tplVslSpcPix):
             aryMaxGss[lgcMaxGss] = np.copy(aryTmpGssNrm[lgcMaxGss])
             
             # Implement Kay method
-            aryKayGss += np.divide(get_bin_prf_ima((varPosX, varPosY),
-                                                   tplVslSpcPix,
-                                                   varSd=2*varSd),
-                                   np.sqrt(vecMaxRsp[indVxl]))
+            if vecMaxRsp[indVxl] > 0.0:
+                aryKayGss += np.divide(get_bin_prf_ima((varPosX, varPosY),
+                                                       tplVslSpcPix,
+                                                       varSd=2*varSd),
+                                       np.sqrt(vecMaxRsp[indVxl]))
+            else:
+                print('No response to stimuli for this voxel')
+                # subtract from division counter to undo addition next line
+                varDivCnt -= 1
 
             # Add to division couner
             varDivCnt += 1
