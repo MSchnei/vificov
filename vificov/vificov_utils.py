@@ -19,11 +19,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import warnings
+import matplotlib
 import numpy as np
 import scipy as sp
-import warnings
 import nibabel as nb
-import matplotlib
+import multiprocessing as mp
 import matplotlib.pyplot as plt
 
 
@@ -154,9 +155,8 @@ def prep_func(lstPathNiiMask, lstPathNiiFunc, strPrepro=None):
             if strPrepro == 'psc':
                 # Get percent signal change of functional data:
                 print('------------Get percent signal change')
-                aryTmpStd = np.std(aryTmpFunc, axis=-1)
                 aryTmpMean = np.mean(aryTmpFunc, axis=-1)
-                aryTmpLgc = np.greater(aryTmpStd, np.array([0.0]))
+                aryTmpLgc = np.greater(aryTmpMean, np.array([0.0]))
                 aryTmpFunc[aryTmpLgc, :] = np.divide(
                     aryTmpFunc[aryTmpLgc, :],
                     aryTmpMean[aryTmpLgc, None]) * 100 - 100
@@ -423,6 +423,165 @@ def crt_2D_gauss(varSizeX, varSizeY, varPosX, varPosY, varSd):
     return aryGauss
 
 
+def cnvl_2D_gauss(idxPrc, aryMdlParamsChnk, arySptExpInf, tplPngSize, queOut):
+    """Spatially convolve input with 2D Gaussian model.
+
+    Parameters
+    ----------
+    idxPrc : int
+        Process ID of the process calling this function (for CPU
+        multi-threading). In GPU version, this parameter is 0 (just one thread
+        on CPU).
+    aryMdlParamsChnk : 2d numpy array, shape [n_models, n_model_params]
+        Array with the model parameter combinations for this chunk.
+    arySptExpInf : 3d numpy array, shape [n_x_pix, n_y_pix, n_conditions]
+        All spatial conditions stacked along second axis.
+    tplPngSize : tuple, 2.
+        Pixel dimensions of the visual space (width, height).
+    queOut : multiprocessing.queues.Queue
+        Queue to put the results on. If this is None, the user is not running
+        multiprocessing but is just calling the function
+    Returns
+    -------
+    data : 2d numpy array, shape [n_models, n_conditions]
+        Closed data.
+    Reference
+    ---------
+    [1]
+    """
+    # Number of combinations of model parameters in the current chunk:
+    varChnkSze = aryMdlParamsChnk.shape[0]
+
+    # Number of conditions / time points of the input data
+    varNumLstAx = arySptExpInf.shape[-1]
+
+    # Output array with results of convolution:
+    aryOut = np.zeros((varChnkSze, varNumLstAx))
+
+    # Loop through combinations of model parameters:
+    for idxMdl in range(0, varChnkSze):
+
+        # Spatial parameters of current model:
+        varTmpX = aryMdlParamsChnk[idxMdl, 0]
+        varTmpY = aryMdlParamsChnk[idxMdl, 1]
+        varTmpSd = aryMdlParamsChnk[idxMdl, 2]
+
+        # Create pRF model (2D):
+        aryGauss = crt_2D_gauss(tplPngSize[0],
+                                tplPngSize[1],
+                                varTmpX,
+                                varTmpY,
+                                varTmpSd)
+
+        # Multiply pixel-time courses with Gaussian pRF models:
+        aryCndTcTmp = np.multiply(arySptExpInf, aryGauss[:, :, None])
+
+        # Calculate sum across x- and y-dimensions - the 'area under the
+        # Gaussian surface'.
+        aryCndTcTmp = np.sum(aryCndTcTmp, axis=(0, 1))
+
+        # Put model time courses into function's output with 2d Gaussian
+        # arrray:
+        aryOut[idxMdl, :] = aryCndTcTmp
+
+    if queOut is None:
+        # if user is not using multiprocessing, return the array directly
+        return aryOut
+
+    else:
+        # Put column with the indices of model-parameter-combinations into the
+        # output array (in order to be able to put the pRF model time courses
+        # into the correct order after the parallelised function):
+        lstOut = [idxPrc,
+                  aryOut]
+
+        # Put output to queue:
+        queOut.put(lstOut)
+
+
+def crt_mdl_rsp(arySptExpInf, tplPngSize, aryMdlParams, varPar):
+    """Create responses of 2D Gauss models to spatial conditions.
+
+    Parameters
+    ----------
+    arySptExpInf : 3d numpy array, shape [n_x_pix, n_y_pix, n_conditions]
+        All spatial conditions stacked along second axis.
+    tplPngSize : tuple, 2
+        Pixel dimensions of the visual space (width, height).
+    aryMdlParams : 2d numpy array, shape [n_x_pos*n_y_pos*n_sd, 3]
+        Model parameters (x, y, sigma) for all models.
+    varPar : int, positive
+        Number of cores to parallelize over.
+
+    Returns
+    -------
+    aryMdlCndRsp : 2d numpy array, shape [n_x_pos*n_y_pos*n_sd, n_cond]
+        Responses of 2D Gauss models to spatial conditions.
+
+    """
+
+    if varPar == 1:
+        # if the number of cores requested by the user is equal to 1,
+        # we save the overhead of multiprocessing by calling aryMdlCndRsp
+        # directly
+        aryMdlCndRsp = cnvl_2D_gauss(0, aryMdlParams, arySptExpInf,
+                                     tplPngSize, None)
+
+    else:
+
+        # The long array with all the combinations of model parameters is put
+        # into separate chunks for parallelisation, using a list of arrays.
+        lstMdlParams = np.array_split(aryMdlParams, varPar)
+
+        # Create a queue to put the results in:
+        queOut = mp.Queue()
+
+        # Empty list for results from parallel processes (for pRF model
+        # responses):
+        lstMdlTc = [None] * varPar
+
+        # Empty list for processes:
+        lstPrcs = [None] * varPar
+
+        print('---------Running parallel processes')
+
+        # Create processes:
+        for idxPrc in range(0, varPar):
+            lstPrcs[idxPrc] = mp.Process(target=cnvl_2D_gauss,
+                                         args=(idxPrc, lstMdlParams[idxPrc],
+                                               arySptExpInf, tplPngSize, queOut
+                                               )
+                                         )
+            # Daemon (kills processes when exiting):
+            lstPrcs[idxPrc].Daemon = True
+
+        # Start processes:
+        for idxPrc in range(0, varPar):
+            lstPrcs[idxPrc].start()
+
+        # Collect results from queue:
+        for idxPrc in range(0, varPar):
+            lstMdlTc[idxPrc] = queOut.get(True)
+
+        # Join processes:
+        for idxPrc in range(0, varPar):
+            lstPrcs[idxPrc].join()
+
+        print('---------Collecting results from parallel processes')
+        # Put output arrays from parallel process into one big array
+        lstMdlTc = sorted(lstMdlTc)
+        aryMdlCndRsp = np.empty((0, arySptExpInf.shape[-1]))
+        for idx in range(0, varPar):
+            aryMdlCndRsp = np.concatenate((aryMdlCndRsp, lstMdlTc[idx][1]),
+                                          axis=0)
+
+        # Clean up:
+        del(lstMdlParams)
+        del(lstMdlTc)
+
+    return aryMdlCndRsp.astype(np.float32)
+
+
 def get_strd_ind(varInd, varVslSpcPix, varStrdWdth=1):
     """Given an index, create striding window for indexing.
 
@@ -530,14 +689,17 @@ def crt_cntr_dot(aryPrm, tplVslSpcPix, lgcNrm=False):
     return aryCntrDts
 
 
-def crt_fov(aryPrm, tplVslSpcPix):
+def crt_fov(aryPrm, arySptExpInf, tplVslSpcPix):
     """Create field of view for given winner x,y,sigma parameters.
 
     Parameters
     ----------
     aryPrm : 2D numpy array, shape [number of voxels, 3]
         Array with x, y, and sigma winner parameters for all voxels included in
-        a given ROI
+        a given ROI.
+    arySptExpInf : 3d numpy array, shape [n_x_pix, n_y_pix, n_conditions]
+        All spatial conditions stacked along second axis.
+        This is required to determine maximum response of pRF for Kay method.
     tplVslSpcPix : tuple
         Tuple with the (width, height) of the visual field in pixel.
 
@@ -550,6 +712,24 @@ def crt_fov(aryPrm, tplVslSpcPix):
     aryKayGss : 2d numpy array, shape [width, height]
         Visual field coverage using Kay method.
 
+    Notes
+    ----------
+    [1] Each of the returned arrays fro visual field coverage is created
+        according to a different emthod that was described in the literature.
+        See references, which are in respective order.
+
+    References
+    ----------
+    [1] Kok, P., Bains, L. J., Van Mourik, T., Norris, D. G., & De Lange, F. P.
+        (2016). Selective activation of the deep layers of the human primary
+        visual cortex by top-down feedback. Current Biology, 26(3), 371–376.
+    [2] Amano, K., Wandell, B. A., & Dumoulin, S. O. (2009). Visual field maps,
+        population receptive field sizes, and visual field coverage in the
+        human MT+ complex. Journal of Neurophysiology, 102(5), 2704–18.
+    [3] Kay, K. N., Weiner, K. S., & Grill-Spector, K. (2015). Attention
+        reduces spatial uncertainty in human ventral temporal cortex.
+        Current Biology, 25(5), 595–600.
+
     """
 
     # Prepare image for additive and max Gaussian
@@ -557,6 +737,17 @@ def crt_fov(aryPrm, tplVslSpcPix):
     aryAddGss = np.rot90(np.zeros((tplVslSpcPix)), k=1)
     aryMaxGss = np.rot90(np.zeros((tplVslSpcPix)), k=1)
     aryKayGss = np.rot90(np.zeros((tplVslSpcPix)), k=1)
+
+    # Upsample spatial information if necessary
+    varFctUps = np.divide(tplVslSpcPix[0], arySptExpInf.shape[0])
+    errorMsg = 'Desired pixel size needs to be multiple of arySptExpInf dim.'
+    assert varFctUps % varFctUps == 0.0, errorMsg
+    varFctUps = int(varFctUps)
+    arySptExpInfUps = np.kron(arySptExpInf, np.ones((varFctUps, varFctUps, 1),
+                              dtype=arySptExpInf.dtype))
+    # Get maximum predicted response for the stimuli in the model fitting
+    vecMaxRsp = np.max(crt_mdl_rsp(arySptExpInfUps, tplVslSpcPix, aryPrm, 10),
+                       axis=1)
 
     # Loop over voxels
     varDivCnt = 0
@@ -573,19 +764,24 @@ def crt_fov(aryPrm, tplVslSpcPix):
                                      varPosX, varPosY, varSd)
             if np.sum(np.isnan(aryTmpGss)) > 1:
                 warnings.warn("NaN value encountered in 2D Gaussian")
-            # Add Gaussians for this region
-            aryAddGss += aryTmpGss
+
 
             # Normalize such that the maximum pixel has value 1.0
             aryTmpGssNrm = np.divide(aryTmpGss, aryTmpGss.max())
+            
+            # Add Gaussians for this region
+            aryAddGss += aryTmpGssNrm
+
             # Find pixels where value has never been that high before
             lgcMaxGss = np.greater(aryTmpGssNrm, aryMaxGss)
             # Copy values for those pixels
             aryMaxGss[lgcMaxGss] = np.copy(aryTmpGssNrm[lgcMaxGss])
             
             # Implement Kay method
-            aryKayGss += get_bin_prf_ima((varPosX, varPosY), tplVslSpcPix,
-                                         varSd=2*varSd)
+            aryKayGss += np.divide(get_bin_prf_ima((varPosX, varPosY),
+                                                   tplVslSpcPix,
+                                                   varSd=2*varSd),
+                                   np.sqrt(vecMaxRsp[indVxl]))
 
             # Add to division couner
             varDivCnt += 1

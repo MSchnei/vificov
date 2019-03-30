@@ -122,6 +122,12 @@ def load_config(strCsvCnfg):
         print('---Path to nii files with threshold map:')
         print('   ' + str(dicCnfg['strPathNiiThr']))
 
+    # Path to npy file with spatial info about apertures:
+    dicCnfg['strSptExpInf'] = ast.literal_eval(dicCnfg['strSptExpInf'])
+    if lgcPrint:
+        print('---Path to npy file with spatial info about apertures:')
+        print('   ' + str(dicCnfg['strSptExpInf']))
+
     # Threshold value for threshold map:
     dicCnfg['varThr'] = float(dicCnfg['varThr'])
     if lgcPrint:

@@ -34,7 +34,7 @@ from vificov.vificov_utils import (cls_set_config, loadNiiPrm, crt_fov,
 def run_vificov(strCsvCnfg, lgcGnPrm=True):
     ###########################################################################
 #    # debugging
-#    strCsvCnfg = '/media/sf_D_DRIVE/MotionQuartet/Tools/P3/Prf/b_11a_config_vificov_NoM.csv'
+    # strCsvCnfg = '/media/sf_D_DRIVE/MotionQuartet/Tools/P3/Prf/b_11b_config_vificov_2pred.csv'
     ###########################################################################
     # %% Load parameters and files
 
@@ -48,7 +48,7 @@ def run_vificov(strCsvCnfg, lgcGnPrm=True):
     # provided as masks
     print('---Load provided parameter maps')
     lstPrmAry, objHdr, aryAff = loadNiiPrm(cfg.lstPathNiiPrm,
-                                           lstFlsMsk=cfg.lstPathNiiMask)        
+                                           lstFlsMsk=cfg.lstPathNiiMask)
 
     # Deduce number of region of interest
     cfg.varNumRois = len(lstPrmAry)
@@ -97,6 +97,11 @@ def run_vificov(strCsvCnfg, lgcGnPrm=True):
         print('------Number of voxels now included in ROI ' + str(ind+1) +
               ': ' + str(varNumVxlIncl))
 
+    # Load information about spatial apertures that were presented in
+    # experiment to obtain pRF parameters. This is needed to create the visual
+    # field coverage according to Kay method.
+    arySptExpInf = np.load(cfg.strSptExpInf)
+
     # %% Convert from degree to pixel
 
     # Convert parameter maps that were provided in degrees of visual angle
@@ -128,7 +133,9 @@ def run_vificov(strCsvCnfg, lgcGnPrm=True):
 
         # Run function to create visual field coverage
         # Return both the result of the additive and maximum method
-        aryAddGss, aryMaxGss, aryKayGss = crt_fov(aryPrm, cfg.tplVslSpcPix)
+        aryAddGss, aryMaxGss, aryKayGss = crt_fov(aryPrm,
+                                                  arySptExpInf,
+                                                  cfg.tplVslSpcPix)
 
         # Put outputs away to list
         lstAddGss[indRoi] = aryAddGss
@@ -144,10 +151,10 @@ def run_vificov(strCsvCnfg, lgcGnPrm=True):
     # Loop over ROIs
     for indRoi, aryPrm in enumerate(lstPrmAry):
         print('------for ROI ' + str(indRoi+1))
-        
+
         # Create images
         aryCntrDts = crt_cntr_dot(aryPrm, cfg.tplVslSpcPix, lgcNrm=True)
-        
+
         # Put outputs away to list
         lstCntrDts[indRoi] = aryCntrDts
 
@@ -185,7 +192,7 @@ def run_vificov(strCsvCnfg, lgcGnPrm=True):
                 aryPrmRsm = aryPrm[arySmpl, :]
                 # for these winner parameters get the visual field coverage
                 aryFldAddGss, aryFldMaxGss, aryFldKayGss = crt_fov(
-                    aryPrmRsm, cfg.tplVslSpcPix)
+                    aryPrmRsm, arySptExpInf, cfg.tplVslSpcPix)
                 # add aryFldAddGss, aryFldMaxGss and aryFldKayGss up over folds
                 aryBtsAddGss += aryFldAddGss
                 aryBtsMaxGss += aryFldMaxGss
@@ -227,7 +234,7 @@ def run_vificov(strCsvCnfg, lgcGnPrm=True):
     # Loop over different regions
     for ind in range(len(lstAddGss)):
         print('---Save files to disk for ROI ' + str(ind+1))
-        
+
         # Derive file name
         strPthFln = os.path.basename(
             os.path.splitext(cfg.lstPathNiiMask[ind])[0])
@@ -247,20 +254,34 @@ def run_vificov(strCsvCnfg, lgcGnPrm=True):
         aryKayGss = lstKayGss[ind]
 
         # Save visual field projections as images
-        varSumAdd = np.sum(aryAddGss, axis=(0, 1))
         varVmin = 0.0
-        varVmax = np.divide(varSumAdd, len(aryAddGss.ravel()))*2
 
         # Save image from aryAddGss to disk
         plt.imsave(strPthImg + '_FOV_add.png', aryAddGss, cmap='plasma',
                    format="png", vmin=varVmin,
-                   vmax=np.percentile(aryAddGss, 75))
+                   vmax=0.35)
         # Save image from aryMaxGss to disk
         plt.imsave(strPthImg + '_FOV_max.png', aryMaxGss, cmap='magma',
                    format="png", vmin=varVmin, vmax=1.0)
         # Save image from aryMaxGss to disk
         plt.imsave(strPthImg + '_FOV_kay.png', aryKayGss, cmap='bone',
-                   format="png", vmin=varVmin, vmax=0.5)
+                   format="png", vmin=varVmin, vmax=1.0)
+
+#        # Generate figure
+#        fig, ax = plt.subplots() # Create a figure with a single axes.
+#        im = ax.imshow(aryKayGss, cmap='bone', vmin=varVmin, vmax=1.0)
+#        # Display the image data
+#        cbar = fig.colorbar(im)
+#        fig.savefig(strPthImg + '_FOV_Kay_colorbar.svg')
+#
+#        # Generate figure
+#        fig, ax = plt.subplots() # Create a figure with a single axes.
+#        im = ax.imshow(aryAddGss, cmap='plasma', vmin=varVmin,
+#                       vmax=0.35)
+#        # Display the image data
+#        cbar = fig.colorbar(im)
+#        fig.savefig(strPthImg + '_FOV_add_colorbar.svg')
+
 
 #        # Get pRF centre image
 #        aryCntrDts = lstCntrDts[ind]
@@ -275,13 +296,13 @@ def run_vificov(strCsvCnfg, lgcGnPrm=True):
 #        im1 = ax.imshow(aryAddGss, cmap='bone', vmin=varVmin,
 #                        vmax=varVmax)
 #        ax.imshow(aryCntrDtsMsk, cmap='cool', vmin=0.0,
-#                  vmax=1.0, extent=im1.get_extent())        
+#                  vmax=1.0, extent=im1.get_extent())
 #        fig.savefig(strPthImg + '_FOV_add_prfCentre.png')
-        
+
 
         # %% Save bootstrapped visual field projections as images
         if cfg.varNumBts > 0:
-            
+
             print('------Save bootstrapped visual field projections as images')
             aryBtsAddGss = lstBtsAddGss[ind]
             aryBtsMaxGss = lstBtsMaxGss[ind]
