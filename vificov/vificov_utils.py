@@ -19,11 +19,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import warnings
+import matplotlib
 import numpy as np
 import scipy as sp
-import warnings
 import nibabel as nb
-import matplotlib
+import multiprocessing as mp
 import matplotlib.pyplot as plt
 
 
@@ -154,9 +155,8 @@ def prep_func(lstPathNiiMask, lstPathNiiFunc, strPrepro=None):
             if strPrepro == 'psc':
                 # Get percent signal change of functional data:
                 print('------------Get percent signal change')
-                aryTmpStd = np.std(aryTmpFunc, axis=-1)
                 aryTmpMean = np.mean(aryTmpFunc, axis=-1)
-                aryTmpLgc = np.greater(aryTmpStd, np.array([0.0]))
+                aryTmpLgc = np.greater(aryTmpMean, np.array([0.0]))
                 aryTmpFunc[aryTmpLgc, :] = np.divide(
                     aryTmpFunc[aryTmpLgc, :],
                     aryTmpMean[aryTmpLgc, None]) * 100 - 100
@@ -423,14 +423,283 @@ def crt_2D_gauss(varSizeX, varSizeY, varPosX, varPosY, varSd):
     return aryGauss
 
 
-def crt_fov(aryPrm, tplVslSpcPix):
+def cnvl_2D_gauss(idxPrc, aryMdlParamsChnk, arySptExpInf, tplPngSize, queOut):
+    """Spatially convolve input with 2D Gaussian model.
+
+    Parameters
+    ----------
+    idxPrc : int
+        Process ID of the process calling this function (for CPU
+        multi-threading). In GPU version, this parameter is 0 (just one thread
+        on CPU).
+    aryMdlParamsChnk : 2d numpy array, shape [n_models, n_model_params]
+        Array with the model parameter combinations for this chunk.
+    arySptExpInf : 3d numpy array, shape [n_x_pix, n_y_pix, n_conditions]
+        All spatial conditions stacked along second axis.
+    tplPngSize : tuple, 2.
+        Pixel dimensions of the visual space (width, height).
+    queOut : multiprocessing.queues.Queue
+        Queue to put the results on. If this is None, the user is not running
+        multiprocessing but is just calling the function
+    Returns
+    -------
+    data : 2d numpy array, shape [n_models, n_conditions]
+        Closed data.
+    Reference
+    ---------
+    [1]
+    """
+    # Number of combinations of model parameters in the current chunk:
+    varChnkSze = aryMdlParamsChnk.shape[0]
+
+    # Number of conditions / time points of the input data
+    varNumLstAx = arySptExpInf.shape[-1]
+
+    # Output array with results of convolution:
+    aryOut = np.zeros((varChnkSze, varNumLstAx))
+
+    # Loop through combinations of model parameters:
+    for idxMdl in range(0, varChnkSze):
+
+        # Spatial parameters of current model:
+        varTmpX = aryMdlParamsChnk[idxMdl, 0]
+        varTmpY = aryMdlParamsChnk[idxMdl, 1]
+        varTmpSd = aryMdlParamsChnk[idxMdl, 2]
+
+        # Create pRF model (2D):
+        aryGauss = crt_2D_gauss(tplPngSize[0],
+                                tplPngSize[1],
+                                varTmpX,
+                                varTmpY,
+                                varTmpSd)
+
+        # Multiply pixel-time courses with Gaussian pRF models:
+        aryCndTcTmp = np.multiply(arySptExpInf, aryGauss[:, :, None])
+
+        # Calculate sum across x- and y-dimensions - the 'area under the
+        # Gaussian surface'.
+        aryCndTcTmp = np.sum(aryCndTcTmp, axis=(0, 1))
+
+        # Put model time courses into function's output with 2d Gaussian
+        # arrray:
+        aryOut[idxMdl, :] = aryCndTcTmp
+
+    if queOut is None:
+        # if user is not using multiprocessing, return the array directly
+        return aryOut
+
+    else:
+        # Put column with the indices of model-parameter-combinations into the
+        # output array (in order to be able to put the pRF model time courses
+        # into the correct order after the parallelised function):
+        lstOut = [idxPrc,
+                  aryOut]
+
+        # Put output to queue:
+        queOut.put(lstOut)
+
+
+def crt_mdl_rsp(arySptExpInf, tplPngSize, aryMdlParams, varPar):
+    """Create responses of 2D Gauss models to spatial conditions.
+
+    Parameters
+    ----------
+    arySptExpInf : 3d numpy array, shape [n_x_pix, n_y_pix, n_conditions]
+        All spatial conditions stacked along second axis.
+    tplPngSize : tuple, 2
+        Pixel dimensions of the visual space (width, height).
+    aryMdlParams : 2d numpy array, shape [n_x_pos*n_y_pos*n_sd, 3]
+        Model parameters (x, y, sigma) for all models.
+    varPar : int, positive
+        Number of cores to parallelize over.
+
+    Returns
+    -------
+    aryMdlCndRsp : 2d numpy array, shape [n_x_pos*n_y_pos*n_sd, n_cond]
+        Responses of 2D Gauss models to spatial conditions.
+
+    """
+
+    if varPar == 1:
+        # if the number of cores requested by the user is equal to 1,
+        # we save the overhead of multiprocessing by calling aryMdlCndRsp
+        # directly
+        aryMdlCndRsp = cnvl_2D_gauss(0, aryMdlParams, arySptExpInf,
+                                     tplPngSize, None)
+
+    else:
+
+        # The long array with all the combinations of model parameters is put
+        # into separate chunks for parallelisation, using a list of arrays.
+        lstMdlParams = np.array_split(aryMdlParams, varPar)
+
+        # Create a queue to put the results in:
+        queOut = mp.Queue()
+
+        # Empty list for results from parallel processes (for pRF model
+        # responses):
+        lstMdlTc = [None] * varPar
+
+        # Empty list for processes:
+        lstPrcs = [None] * varPar
+
+        print('---------Running parallel processes')
+
+        # Create processes:
+        for idxPrc in range(0, varPar):
+            lstPrcs[idxPrc] = mp.Process(target=cnvl_2D_gauss,
+                                         args=(idxPrc, lstMdlParams[idxPrc],
+                                               arySptExpInf, tplPngSize, queOut
+                                               )
+                                         )
+            # Daemon (kills processes when exiting):
+            lstPrcs[idxPrc].Daemon = True
+
+        # Start processes:
+        for idxPrc in range(0, varPar):
+            lstPrcs[idxPrc].start()
+
+        # Collect results from queue:
+        for idxPrc in range(0, varPar):
+            lstMdlTc[idxPrc] = queOut.get(True)
+
+        # Join processes:
+        for idxPrc in range(0, varPar):
+            lstPrcs[idxPrc].join()
+
+        print('---------Collecting results from parallel processes')
+        # Put output arrays from parallel process into one big array
+        lstMdlTc = sorted(lstMdlTc)
+        aryMdlCndRsp = np.empty((0, arySptExpInf.shape[-1]))
+        for idx in range(0, varPar):
+            aryMdlCndRsp = np.concatenate((aryMdlCndRsp, lstMdlTc[idx][1]),
+                                          axis=0)
+
+        # Clean up:
+        del(lstMdlParams)
+        del(lstMdlTc)
+
+    return aryMdlCndRsp.astype(np.float32)
+
+
+def get_strd_ind(varInd, varVslSpcPix, varStrdWdth=1):
+    """Given an index, create striding window for indexing.
+
+    Parameters
+    ----------
+    varInd : integer
+        Integer on which the striding window will center.
+    varVslSpcPix : integer
+        Integer with the width or height of the visual field in pixel.
+    varStrdWdth : integer
+        Integer that describes the width of the striding window.
+
+    Returns
+    -------
+    lstStrdInd : list
+        List of striding indices.
+
+    """
+    
+    # Make sure varInd and varStrdWdth are integers
+    varInd = int(varInd)
+    varStrdWdth = int(varStrdWdth)
+    
+    # Create list around centre index.
+    lstStrdInd = np.arange(varInd-varStrdWdth, varInd+varStrdWdth+1)
+    
+    # Exclude indices that go out of the image array
+    lstStrdInd = lstStrdInd[np.logical_and(lstStrdInd >= 0,
+                                           lstStrdInd < varVslSpcPix)]
+    
+    return lstStrdInd
+
+
+def get_bin_prf_ima(tplCentre, tplVslSpcPix, varSd=1):
+    """Create create binary pRF image.
+
+    Parameters
+    ----------
+    tplCentre : tuple
+        Pixel on which the pRF centers.
+    tplVslSpcPix : tuple
+        Tuple with the width and height of the visual field in pixel.
+    varSd : integer
+        Integer that describes the size of the pRF in pixel.
+
+    Returns
+    -------
+    aryBinPrfIma : 2D numpy array
+        Binary pRF image.
+
+    """
+    # Sort input and make sure it is integer value
+    varPosX, varPosY = int(tplCentre[0]), int(tplCentre[1])
+    varSizeX, varSizeY = int(tplVslSpcPix[0]), int(tplVslSpcPix[1])
+
+    # Create x and y in meshgrid:
+    aryX, aryY = sp.mgrid[0:varSizeX, 0:varSizeY]
+
+    # The actual creation of the Gaussian array:    
+    aryR = np.sqrt((aryX - varPosX)**2+(aryY - varPosY)**2)
+    
+    return np.less_equal(aryR, varSd).astype(np.int8)
+
+
+
+def crt_cntr_dot(aryPrm, tplVslSpcPix, lgcNrm=False):
+    """Create image for pRF centre dots.
+    
+    Parameters
+    ----------
+    aryPrm : 2D numpy array, shape [number of voxels, 3]
+        Array with x, y, and sigma winner parameters for all voxels included in
+        a given ROI
+    tplVslSpcPix : tuple
+        Tuple with the (width, height) of the visual field in pixel.
+    lgcNrm : boolean
+        Should returned array be normalizes such that max value is 1?
+
+    Returns
+    -------
+    aryCntrDts : 2D numpy array
+        Image of pRF centers. Values of 1 where centre and zero values
+        elsewhere.
+
+    """
+
+    # Prepare image for pRF centre dots
+    aryCntrDts = np.zeros((tplVslSpcPix), dtype=np.int8)
+    
+    for indVxl, vecVxlPrm in enumerate(aryPrm):
+        # Extract x and y winner parameters for this voxel
+        varPosX, varPosY = vecVxlPrm[0], vecVxlPrm[1]
+        
+        # Add 1 to pixel at pRF centre (and, if desired, surrounding pixels)
+        aryCntrDts[get_strd_ind(varPosX, tplVslSpcPix[0])[:, np.newaxis],
+                   get_strd_ind(varPosY, tplVslSpcPix[1])] += 1
+
+    # Use np.rot90 to make sure array is compatible with result of crt_2D_gauss
+    aryCntrDts = np.rot90(aryCntrDts, k=1)
+    
+    # If desired by user, normalize the array
+    if lgcNrm:
+        aryCntrDts[aryCntrDts>0] = 1
+    
+    return aryCntrDts
+
+
+def crt_fov(aryPrm, arySptExpInf, tplVslSpcPix):
     """Create field of view for given winner x,y,sigma parameters.
 
     Parameters
     ----------
     aryPrm : 2D numpy array, shape [number of voxels, 3]
         Array with x, y, and sigma winner parameters for all voxels included in
-        a given ROI
+        a given ROI.
+    arySptExpInf : 3d numpy array, shape [n_x_pix, n_y_pix, n_conditions]
+        All spatial conditions stacked along second axis.
+        This is required to determine maximum response of pRF for Kay method.
     tplVslSpcPix : tuple
         Tuple with the (width, height) of the visual field in pixel.
 
@@ -439,11 +708,27 @@ def crt_fov(aryPrm, tplVslSpcPix):
     aryAddGss : 2d numpy array, shape [width, height]
         Visual field coverage using the additive method.
     aryMaxGss : 2d numpy array, shape [width, height]
-        Visual field coverage using maximum method.
+        Visual field coverage using maximum method with normalized Gaussian.
+    aryKayGss : 2d numpy array, shape [width, height]
+        Visual field coverage using Kay method.
+
+    Notes
+    ----------
+    [1] Each of the returned arrays fro visual field coverage is created
+        according to a different emthod that was described in the literature.
+        See references, which are in respective order.
 
     References
-    -------
-    [1]
+    ----------
+    [1] Kok, P., Bains, L. J., Van Mourik, T., Norris, D. G., & De Lange, F. P.
+        (2016). Selective activation of the deep layers of the human primary
+        visual cortex by top-down feedback. Current Biology, 26(3), 371–376.
+    [2] Amano, K., Wandell, B. A., & Dumoulin, S. O. (2009). Visual field maps,
+        population receptive field sizes, and visual field coverage in the
+        human MT+ complex. Journal of Neurophysiology, 102(5), 2704–18.
+    [3] Kay, K. N., Weiner, K. S., & Grill-Spector, K. (2015). Attention
+        reduces spatial uncertainty in human ventral temporal cortex.
+        Current Biology, 25(5), 595–600.
 
     """
 
@@ -451,6 +736,18 @@ def crt_fov(aryPrm, tplVslSpcPix):
     # use np.rot90 to make sure array is compatible with result of crt_2D_gauss
     aryAddGss = np.rot90(np.zeros((tplVslSpcPix)), k=1)
     aryMaxGss = np.rot90(np.zeros((tplVslSpcPix)), k=1)
+    aryKayGss = np.rot90(np.zeros((tplVslSpcPix)), k=1)
+
+    # Upsample spatial information if necessary
+    varFctUps = np.divide(tplVslSpcPix[0], arySptExpInf.shape[0])
+    errorMsg = 'Desired pixel size needs to be multiple of arySptExpInf dim.'
+    assert varFctUps % varFctUps == 0.0, errorMsg
+    varFctUps = int(varFctUps)
+    arySptExpInfUps = np.kron(arySptExpInf, np.ones((varFctUps, varFctUps, 1),
+                              dtype=arySptExpInf.dtype))
+    # Get maximum predicted response for the stimuli in the model fitting
+    vecMaxRsp = np.max(crt_mdl_rsp(arySptExpInfUps, tplVslSpcPix, aryPrm, 10),
+                       axis=1)
 
     # Loop over voxels
     varDivCnt = 0
@@ -460,26 +757,40 @@ def crt_fov(aryPrm, tplVslSpcPix):
         # Do not continue the for-loop for voxels that have a standard
         # deviation of 0 pixels
         if np.isclose(varSd, 0, atol=1e-04):
-            continue
+            warnings.warn("Voxel skipped because SD equals 0")
         else:
             # Recreate the winner 2D Gaussian
             aryTmpGss = crt_2D_gauss(tplVslSpcPix[0], tplVslSpcPix[1],
                                      varPosX, varPosY, varSd)
             if np.sum(np.isnan(aryTmpGss)) > 1:
                 warnings.warn("NaN value encountered in 2D Gaussian")
-            # Add Gaussians for this region
-            aryAddGss += aryTmpGss
-            # Replace pixels for which aryTmpGss is greater than aryMaxGss
+
+
+            # Normalize such that the maximum pixel has value 1.0
             aryTmpGssNrm = np.divide(aryTmpGss, aryTmpGss.max())
+            
+            # Add Gaussians for this region
+            aryAddGss += aryTmpGssNrm
+
+            # Find pixels where value has never been that high before
             lgcMaxGss = np.greater(aryTmpGssNrm, aryMaxGss)
+            # Copy values for those pixels
             aryMaxGss[lgcMaxGss] = np.copy(aryTmpGssNrm[lgcMaxGss])
+            
+            # Implement Kay method
+            aryKayGss += np.divide(get_bin_prf_ima((varPosX, varPosY),
+                                                   tplVslSpcPix,
+                                                   varSd=2*varSd),
+                                   np.sqrt(vecMaxRsp[indVxl]))
+
             # Add to division couner
             varDivCnt += 1
 
     # Divide by total number of Gaussians that were included
     aryAddGss /= varDivCnt
+    aryKayGss /= varDivCnt
 
-    return aryAddGss, aryMaxGss
+    return aryAddGss, aryMaxGss, aryKayGss
 
 
 def calc_ovlp(aryPrm, lstTmplIma, tplVslSpcPix):
@@ -583,7 +894,9 @@ def crt_prj(aryPrm, aryStatsMap, tplVslSpcPix):
     # The 1 is added to make the normalization stable, otherwise in areas of
     # the visual field that are not covered by any voxels division would be by
     # a number close to zero, resulting in extremely large numbers
-    aryPrj = np.divide(aryAddPrj, np.add(aryAddGss, 1)[:, :, None])
+#    aryPrj = np.divide(aryAddPrj, np.add(aryAddGss, 1)[:, :, None])
+    aryPrj = np.divide(aryAddPrj, aryAddGss[:, :, None])
+
 
     return aryPrj, aryAddPrj, aryAddGss
 

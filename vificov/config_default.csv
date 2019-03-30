@@ -52,6 +52,9 @@ lstPathNiiMask = ['~/maskV1.nii', '~/maskV2.nii', '~/maskV3.nii', '~/fnc04.nii']
 # Optional, provide empty string if thresholding is undesired.
 strPathNiiThr = '~/R2.nii'
 
+# Path to npy file with spatial info about apertures
+strSptExpInf = '~/arySptExpInf.npy'
+
 # Provide threshold value for threshold map.
 # Optional, will be ignored if no threshold map is provided.
 varThr = 0.20
